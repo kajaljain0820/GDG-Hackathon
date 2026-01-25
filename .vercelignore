@@ -1,0 +1,15 @@
+node_modules
+.next
+.env.local
+.env
+*.log
+coverage
+.firebase
+firebase-debug.log
+functions/node_modules
+functions/lib
+*.txt
+diagnostic-report.txt
+test-log.txt
+dev-server.js
+server.js

@@ -1,0 +1,97 @@
+@import "tailwindcss";
+
+:root {
+  --background: #FFFCF8;
+  /* Light warm cream base */
+  --foreground: #2E2A26;
+  --primary-glow: linear-gradient(135deg, #4CAF50 0%, #66BB6A 50%, #81C784 100%);
+  --primary-green: #4CAF50;
+  --primary-green-light: #66BB6A;
+  --accent-warm: #FFB703;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-outfit), sans-serif;
+  overflow-x: hidden;
+  /* Soft Green + Warm Aurora Mesh */
+  background-image:
+    radial-gradient(at 0% 0%, rgba(76, 175, 80, 0.12) 0px, transparent 50%),
+    radial-gradient(at 50% 0%, rgba(200, 230, 201, 0.2) 0, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(255, 183, 3, 0.1) 0, transparent 50%),
+    radial-gradient(at 0% 50%, rgba(129, 199, 132, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(255, 248, 241, 0.3) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(232, 245, 233, 0.15) 0px, transparent 50%);
+}
+
+/* Noise */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9999;
+  opacity: 0.015;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  filter: invert(1);
+}
+
+/* Animations */
+@keyframes shine {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes grid-flow {
+  0% {
+    transform: translateY(0);
+  }
+
+  100% {
+    transform: translateY(40px);
+  }
+}
+
+/* Lenis */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(76, 175, 80, 0.3);
+  border-radius: 10px;
+}

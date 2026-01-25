@@ -1,0 +1,43 @@
+{
+  "name": "echo-platform-backend",
+  "version": "1.0.0",
+  "description": "Backend for Campus AI Learning Platform",
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "emulators": "firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "@google-cloud/aiplatform": "^3.10.0",
+    "@google-cloud/documentai": "^8.0.0",
+    "@google-cloud/speech": "^6.0.0",
+    "@google-cloud/vertexai": "^1.10.0",
+    "@types/multer": "^2.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "firebase-admin": "^11.11.0",
+    "firebase-functions": "^4.5.0",
+    "googleapis": "^129.0.0",
+    "multer": "^2.0.2",
+    "office-text-extractor": "^3.0.3",
+    "pdf-parse": "^2.4.5"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/pdf-parse": "^1.1.5",
+    "firebase-functions-test": "^3.1.0",
+    "firebase-tools": "^15.1.0",
+    "typescript": "^5.3.3"
+  },
+  "private": true
+}
