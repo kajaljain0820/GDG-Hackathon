@@ -27,16 +27,27 @@ export default function GoogleSignInButton({
         try {
             const provider = new GoogleAuthProvider();
 
-            // Optional: Set additional scopes for more information
+            // Add scopes for profile, email, and Google Drive access
             provider.addScope('profile');
             provider.addScope('email');
+            provider.addScope('https://www.googleapis.com/auth/drive');
 
-            // Set custom parameters if needed (e.g., force account selection)
+            // Set custom parameters to prompt for consent
             provider.setCustomParameters({
-                prompt: 'select_account'
+                prompt: 'consent'
             });
 
             const result = await signInWithPopup(auth, provider);
+
+            // Extract Google OAuth access token (for Google API calls like Drive)
+            const credential = GoogleAuthProvider.credentialFromResult(result);
+            const googleAccessToken = credential?.accessToken;
+
+            if (googleAccessToken) {
+                // Store the Google access token for API calls
+                localStorage.setItem('googleAccessToken', googleAccessToken);
+                console.log('✅ Google access token stored for API access');
+            }
 
             // User is now signed in
             console.log('✅ Google Sign-in successful:', result.user.email);

@@ -167,6 +167,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             // Student logout
             await firebaseSignOut(auth);
         }
+
+        // Clear Google OAuth access token for both student and professor
+        localStorage.removeItem('googleAccessToken');
     };
 
     return (
