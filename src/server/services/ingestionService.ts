@@ -14,7 +14,7 @@ function getDocumentAIClient(): DocumentProcessorServiceClient {
 
         documentAIClient = new DocumentProcessorServiceClient({
             credentials,
-            projectId: process.env.GCP_PROJECT_ID || 'sparklink-d72d1'
+            projectId: process.env.GCP_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'sparklink-d72d1'
         });
     }
     return documentAIClient;
@@ -58,9 +58,9 @@ const chunkText = (text: string, chunkSize: number = 2000, overlap: number = 200
 // Helper: Document AI Extraction
 const extractTextWithDocAI = async (buffer: Buffer, mimeType: string): Promise<string> => {
     try {
-        const projectId = process.env.GCP_PROJECT_ID || 'sparklink-d72d1';
+        const projectId = process.env.GCP_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'sparklink-d72d1';
         const location = 'us'; // Format: 'us' or 'eu'
-        const processorId = process.env.DOCAI_PROCESSOR_ID || 'c01e56b43729863c'; // Replace with env var
+        const processorId = process.env.DOCAI_PROCESSOR_ID; // Must be provided in env
 
         if (!processorId) throw new Error('DOCAI_PROCESSOR_ID not configured');
 

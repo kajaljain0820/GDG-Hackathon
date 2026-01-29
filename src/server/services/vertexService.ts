@@ -2,7 +2,7 @@ import { VertexAI, GenerativeModel } from '@google-cloud/vertexai';
 
 // Lazy initialization for Vertex AI to avoid module-level timeout
 // Note: These values should be in environment variables
-const project = process.env.GCP_PROJECT_ID || 'sparklink-d72d1';
+const project = process.env.GCP_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'sparklink-d72d1';
 const location = process.env.GCP_LOCATION || 'us-central1';
 
 let vertex_ai: VertexAI | null = null;

@@ -12,7 +12,12 @@ export const createSession = async (req: Request, res: Response) => {
         // 1. Generate Meet Link using Google Calendar API
         let meetLink = '';
         try {
+            const credentials = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
+                ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
+                : undefined;
+
             const auth = new google.auth.GoogleAuth({
+                credentials,
                 scopes: ['https://www.googleapis.com/auth/calendar']
             });
             const authClient = await auth.getClient();
@@ -80,7 +85,7 @@ export const createSession = async (req: Request, res: Response) => {
 
 export const getSessions = async (req: Request, res: Response) => {
     try {
-        const { courseId } = req.query;
+        const courseId = req.query.courseId as string;
         if (!courseId) return res.status(400).json({ error: 'Missing courseId' });
 
         const sessionsSnap = await db.collection('courses')

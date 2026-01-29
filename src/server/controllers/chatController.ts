@@ -30,7 +30,7 @@ export const createChat = async (req: Request, res: Response) => {
 export const sendMessage = async (req: Request, res: Response) => {
     try {
         const { uid } = (req as any).user;
-        const { chatId } = req.params;
+        const chatId = req.params.chatId as string;
         const { message, courseId } = req.body;
 
         const chatRef = db.collection('users').doc(uid).collection('chats').doc(chatId);
@@ -129,7 +129,7 @@ export const getUserChats = async (req: Request, res: Response) => {
 export const getChatDetails = async (req: Request, res: Response) => {
     try {
         const { uid } = (req as any).user;
-        const { chatId } = req.params;
+        const chatId = req.params.chatId as string;
         const chatDoc = await db.collection('users').doc(uid).collection('chats').doc(chatId).get();
 
         if (!chatDoc.exists) return res.status(404).json({ error: 'Chat not found' });

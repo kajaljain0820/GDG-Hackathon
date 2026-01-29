@@ -3,7 +3,7 @@ import { db } from '@/lib/firebase-admin';
 
 export const getProfessorAnalytics = async (req: Request, res: Response) => {
     try {
-        const { courseId } = req.query;
+        const courseId = req.query.courseId as string;
         if (!courseId) return res.status(400).json({ error: 'Missing courseId' });
 
         // 1. Aggregate Stats (Mock logic for speed, real DB aggregation is costly without Counters)
