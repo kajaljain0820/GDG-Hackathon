@@ -105,12 +105,46 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     year: 0 // Indicates faculty
                 }).catch(e => console.error("Error syncing professor profile on restore:", e));
 
+                return;
             } catch (e) {
                 console.error('Invalid professor session');
                 localStorage.removeItem('professorSession');
             }
         }
-    }, []);
+
+        // Check for existing student session (Firestore-based login)
+        const storedStudentSession = localStorage.getItem('studentSession');
+        if (storedStudentSession) {
+            try {
+                const session = JSON.parse(storedStudentSession);
+                setToken(`Student ${session.uid}`);
+                setUser({
+                    uid: session.uid,
+                    email: session.email,
+                    displayName: session.displayName,
+                    emailVerified: true,
+                    isAnonymous: false,
+                    metadata: {},
+                    providerData: [],
+                    refreshToken: '',
+                    tenantId: null,
+                    delete: async () => { },
+                    getIdToken: async () => `Student ${session.uid}`,
+                    getIdTokenResult: async () => ({ claims: { role: 'student' }, token: '', authTime: '', issuedAtTime: '', expirationTime: '', signInProvider: null, signInSecondFactor: null }),
+                    reload: async () => { },
+                    toJSON: () => session,
+                    phoneNumber: null,
+                    photoURL: null,
+                    providerId: 'firestore'
+                } as any);
+                setLoading(false);
+                console.log('✅ Student session restored from localStorage');
+            } catch (e) {
+                console.error('Invalid student session');
+                localStorage.removeItem('studentSession');
+            }
+        }
+    }, [isAdmin]);
 
     // Student authentication (Firebase)
     // Unified authentication (Firebase)
@@ -226,7 +260,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
-    // Combined login function that checks for admin first, then professor
+    // Combined login function that checks for admin first, then professor, then Firestore users
     const professorLogin = async (email: string, password: string): Promise<{ success: boolean; error?: string; isAdmin?: boolean }> => {
         // Check for admin credentials first
         if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
@@ -264,20 +298,117 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             return { success: true };
         }
 
-        // Try standard Firebase Auth login (for provisioned professor accounts)
+        // Try standard Firebase Auth login first
         try {
-            console.log('🔐 Attempting Firebase Auth login for professor...');
+            console.log('🔐 Attempting Firebase Auth login...');
             await signInWithEmailAndPassword(auth, email, password);
-            console.log('✅ Firebase Auth login successful - onAuthStateChanged will handle session');
+            console.log('✅ Firebase Auth login successful');
             return { success: true };
-        } catch (error: any) {
-            console.error('Professor login error:', error);
-            // If firebase auth fails, we assume invalid credentials.
-            // We no longer fallback to the API for auth since we enforce client-side auth now.
-            return {
-                success: false,
-                error: 'Invalid credentials or account not found'
-            };
+        } catch (firebaseError: any) {
+            console.log('⚠️ Firebase Auth failed, checking Firestore...');
+
+            // Firebase Auth failed - try Firestore-based login
+            try {
+                // Check professors collection
+                const { getDocs, collection, query, where } = await import('firebase/firestore');
+                const { db } = await import('@/lib/firebase');
+
+                // Check professors first
+                const professorQuery = query(
+                    collection(db, 'professors'),
+                    where('email', '==', email)
+                );
+                const professorSnapshot = await getDocs(professorQuery);
+
+                if (!professorSnapshot.empty) {
+                    const professorDoc = professorSnapshot.docs[0];
+                    const professorData = professorDoc.data();
+
+                    if (professorData.password === password) {
+                        const professorSessionData: ProfessorSession = {
+                            role: 'professor',
+                            email: professorData.email,
+                            name: professorData.name,
+                            uid: professorDoc.id
+                        };
+
+                        setProfessorSession(professorSessionData);
+                        setIsProfessor(true);
+                        setToken(`Professor ${professorDoc.id}`);
+                        localStorage.setItem('professorSession', JSON.stringify(professorSessionData));
+
+                        console.log('✅ Professor login successful (Firestore)');
+                        return { success: true };
+                    }
+                }
+
+                // Check students collection
+                const studentQuery = query(
+                    collection(db, 'students'),
+                    where('email', '==', email)
+                );
+                const studentSnapshot = await getDocs(studentQuery);
+
+                if (!studentSnapshot.empty) {
+                    const studentDoc = studentSnapshot.docs[0];
+                    const studentData = studentDoc.data();
+
+                    if (studentData.password === password) {
+                        // Create a mock user object for students from Firestore
+                        const studentSession = {
+                            uid: studentDoc.id,
+                            email: studentData.email,
+                            displayName: studentData.name,
+                            role: 'student',
+                            department: studentData.department,
+                            year: studentData.year,
+                            classId: studentData.classId,
+                            className: studentData.className
+                        };
+
+                        // Store student session
+                        localStorage.setItem('studentSession', JSON.stringify(studentSession));
+                        setToken(`Student ${studentDoc.id}`);
+
+                        // Set a pseudo-user for the context
+                        setUser({
+                            uid: studentDoc.id,
+                            email: studentData.email,
+                            displayName: studentData.name,
+                            emailVerified: true,
+                            isAnonymous: false,
+                            metadata: {},
+                            providerData: [],
+                            refreshToken: '',
+                            tenantId: null,
+                            delete: async () => { },
+                            getIdToken: async () => `Student ${studentDoc.id}`,
+                            getIdTokenResult: async () => ({ claims: { role: 'student' }, token: '', authTime: '', issuedAtTime: '', expirationTime: '', signInProvider: null, signInSecondFactor: null }),
+                            reload: async () => { },
+                            toJSON: () => studentSession,
+                            phoneNumber: null,
+                            photoURL: null,
+                            providerId: 'firestore'
+                        } as any);
+
+                        console.log('✅ Student login successful (Firestore)');
+                        return { success: true };
+                    }
+                }
+
+                // No matching user found
+                return {
+                    success: false,
+                    error: 'Invalid email or password'
+                };
+
+            } catch (firestoreError: any) {
+                console.error('Firestore login check error:', firestoreError);
+                return {
+                    success: false,
+                    error: 'Login failed. Please try again.'
+                };
+            }
         }
     };
 
@@ -296,7 +427,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             localStorage.removeItem('professorSession');
         } else {
             // Student logout
-            await firebaseSignOut(auth);
+            setUser(null);
+            setToken(null);
+            localStorage.removeItem('studentSession');
+            try {
+                await firebaseSignOut(auth);
+            } catch (e) {
+                // Ignore if not signed in via Firebase
+            }
         }
 
         // Clear Google OAuth access token for all users
