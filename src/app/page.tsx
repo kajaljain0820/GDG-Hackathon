@@ -309,7 +309,7 @@ export default function Home() {
         <div className="w-full border-t border-slate-200 mt-auto">
           <div className="max-w-7xl mx-auto px-6 py-8 flex flex-col items-center justify-center gap-4">
             <p className="text-slate-500 text-sm font-medium mb-2">
-              Developed by <span className="text-slate-900 font-bold">Rithik Kumaran K</span>
+              Developed by <span className="text-slate-900 font-bold">Team Codeify</span>
             </p>
 
             <div className="flex items-center gap-4">
