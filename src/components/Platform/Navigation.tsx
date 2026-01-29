@@ -2,13 +2,14 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Book, MessageCircle, Video, Users, History, GraduationCap, Presentation, ClipboardList, BrainCircuit, FileText, Calendar, ListTodo, Library, CalendarDays, Shield, Building2, UserPlus, BookOpen } from 'lucide-react';
+import { LayoutDashboard, Book, MessageCircle, Video, Users, History, GraduationCap, Presentation, ClipboardList, BrainCircuit, FileText, Calendar, ListTodo, Library, CalendarDays, Shield, Building2, UserPlus, BookOpen, Languages } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 const studentLinks = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'My Tasks', href: '/dashboard/tasks', icon: ClipboardList },
     { name: 'Study Plan Maker', href: '/dashboard/study-plan', icon: CalendarDays },
+    { name: 'Doc Translator', href: '/dashboard/doc-translator', icon: Languages },
     { name: 'Resource Library', href: '/dashboard/resources', icon: Library },
     { name: 'AI Notebook', href: '/dashboard/notebook', icon: Book },
     { name: 'Doubt Forum', href: '/dashboard/forum', icon: MessageCircle },
@@ -22,6 +23,7 @@ const professorLinks = [
     { name: 'Task Assignment', href: '/dashboard/professor/assignments', icon: ClipboardList },
     { name: 'AI Notebook', href: '/dashboard/notebook', icon: Book },
     { name: 'AI PPT Generator', href: '/dashboard/ppt-generator', icon: Presentation },
+    { name: 'Doc Translator', href: '/dashboard/doc-translator', icon: Languages },
     { name: 'Smart Quiz Maker', href: '/dashboard/quiz-maker', icon: BrainCircuit },
     { name: 'Doc Summarizer', href: '/dashboard/doc-summarizer', icon: FileText },
     { name: 'Club Management', href: '/dashboard/clubs', icon: Calendar },
@@ -38,13 +40,13 @@ const adminLinks = [
 
 export default function Navigation() {
     const pathname = usePathname();
-    const { user, isProfessor, isAdmin, adminSession, professorSession } = useAuth();
+    const { user, isProfessor, isAdmin, adminSession, professorSession, isStudent, studentSession } = useAuth();
 
     // Show different links based on role
     let links = studentLinks;
     let roleLabel = 'Student';
-    let roleEmail = user?.email || 'student@echo.edu';
-    let avatarLetter = user?.displayName?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U';
+    let roleEmail = studentSession?.email || user?.email || 'student@echo.edu';
+    let avatarLetter = studentSession?.name?.charAt(0).toUpperCase() || user?.displayName?.charAt(0).toUpperCase() || 'S';
     let avatarGradient = 'from-green-500 to-emerald-600';
 
     if (isAdmin) {
@@ -77,8 +79,8 @@ export default function Navigation() {
             {(isAdmin || isProfessor) && (
                 <div className="px-3 py-2">
                     <div className={`px-2 py-1 rounded-lg text-center text-xs font-bold ${isAdmin
-                            ? 'bg-purple-100 text-purple-700'
-                            : 'bg-blue-100 text-blue-700'
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'bg-blue-100 text-blue-700'
                         }`}>
                         <span className="opacity-0 group-hover:opacity-100 transition-opacity">
                             {isAdmin ? '🔐 Admin Mode' : '📚 Professor Mode'}

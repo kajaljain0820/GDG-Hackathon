@@ -20,22 +20,36 @@ export default function GoogleServicesConnect({
     const [loading, setLoading] = useState(false);
     const [isConnected, setIsConnected] = useState(false);
     const [connectedEmail, setConnectedEmail] = useState<string | null>(null);
-    const { user } = useAuth();
+    const { user, refreshUser } = useAuth();
 
     // Check if Google is already linked
     useEffect(() => {
-        if (user) {
-            const googleProvider = user.providerData.find(
-                (provider) => provider.providerId === 'google.com'
-            );
-            if (googleProvider) {
-                setIsConnected(true);
-                setConnectedEmail(googleProvider.email);
-            } else {
-                setIsConnected(false);
-                setConnectedEmail(null);
+        const checkConnection = () => {
+            const currentUser = auth.currentUser;
+            if (currentUser) {
+                const googleProvider = currentUser.providerData.find(
+                    (provider) => provider.providerId === 'google.com'
+                );
+                if (googleProvider) {
+                    setIsConnected(true);
+                    setConnectedEmail(googleProvider.email);
+                } else {
+                    setIsConnected(false);
+                    setConnectedEmail(null);
+                }
+            } else if (user) {
+                // Fallback: check if we have a stored token if Auth user isn't loaded yet
+                const storedToken = localStorage.getItem('googleAccessToken');
+                if (storedToken) {
+                    // We don't have the email from the token easily, but we know it was connected
+                    // For now, we'll wait for Firebase Auth to initialize
+                }
             }
-        }
+        };
+
+        checkConnection();
+        const unsubscribe = auth.onAuthStateChanged(checkConnection);
+        return () => unsubscribe();
     }, [user]);
 
     // Check for stored access token
@@ -48,8 +62,9 @@ export default function GoogleServicesConnect({
     }, [isConnected]);
 
     const handleConnectGoogle = async () => {
-        if (!user) {
-            onError?.('You must be logged in to connect Google services');
+        const currentUser = auth.currentUser;
+        if (!user || !currentUser) {
+            onError?.('You must be logged in with a valid session to connect Google services');
             return;
         }
 
@@ -68,7 +83,7 @@ export default function GoogleServicesConnect({
                 prompt: 'consent'
             });
 
-            const result = await linkWithPopup(user, provider);
+            const result = await linkWithPopup(auth.currentUser!, provider);
 
             // Extract Google OAuth access token (for Google API calls like Drive)
             const credential = GoogleAuthProvider.credentialFromResult(result);
@@ -83,6 +98,7 @@ export default function GoogleServicesConnect({
             setIsConnected(true);
             setConnectedEmail(result.user.providerData.find(p => p.providerId === 'google.com')?.email || null);
             onSuccess?.();
+            await refreshUser();
             console.log('✅ Google account linked successfully');
         } catch (error: any) {
             console.error('❌ Error linking Google:', error);
@@ -107,11 +123,12 @@ export default function GoogleServicesConnect({
     };
 
     const handleDisconnectGoogle = async () => {
-        if (!user) return;
+        const currentUser = auth.currentUser;
+        if (!user || !currentUser) return;
 
         setLoading(true);
         try {
-            await unlink(user, 'google.com');
+            await unlink(currentUser, 'google.com');
             localStorage.removeItem('googleAccessToken');
             setIsConnected(false);
             setConnectedEmail(null);
@@ -216,8 +233,8 @@ export default function GoogleServicesConnect({
                                 <span
                                     key={service.name}
                                     className={`text-xs px-2 py-1 rounded ${isConnected && service.available
-                                            ? 'bg-blue-100 text-blue-700'
-                                            : 'bg-slate-100 text-slate-400'
+                                        ? 'bg-blue-100 text-blue-700'
+                                        : 'bg-slate-100 text-slate-400'
                                         }`}
                                 >
                                     {service.name}

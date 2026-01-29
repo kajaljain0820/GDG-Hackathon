@@ -162,7 +162,7 @@ export function subscribeToSessions(
             const fetchSessions = async () => {
                 try {
                     const session = JSON.parse(professorSession);
-                    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001/echo-1928rn/us-central1/api';
+                    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001/sparklink-d72d1/us-central1/api';
                     const response = await fetch(`${apiBaseUrl}/professor/sessions/${courseId}`, {
                         headers: {
                             'Authorization': `Professor ${session.uid}`,
@@ -307,3 +307,4 @@ export const sessionsService = {
 };
 
 export default sessionsService;
+

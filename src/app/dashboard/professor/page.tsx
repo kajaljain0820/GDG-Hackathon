@@ -97,7 +97,7 @@ export default function ProfessorDashboard() {
             if (professorSession) {
                 try {
                     const session = JSON.parse(professorSession);
-                    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001/echo-1928rn/us-central1/api';
+                    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001/sparklink-d72d1/us-central1/api';
                     const response = await fetch(`${apiBaseUrl}/professor/sessions/${courseId}`, {
                         headers: {
                             'Authorization': `Professor ${session.uid}`,
@@ -141,7 +141,7 @@ export default function ProfessorDashboard() {
 
         try {
             // Call professor API to reply (avoids Firestore permission issues)
-            const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001/echo-1928rn/us-central1/api';
+            const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001/sparklink-d72d1/us-central1/api';
             const response = await fetch(`${apiBaseUrl}/professor/doubts/${doubt.doubtId}/reply`, {
                 method: 'POST',
                 headers: {
@@ -447,3 +447,4 @@ export default function ProfessorDashboard() {
         </div>
     );
 }
+

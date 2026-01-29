@@ -4,19 +4,18 @@ import { useState, useEffect } from 'react';
 import GlassCard from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Search, X, Send, FileText, MoreVertical, ThumbsUp, MessageSquare, Video, Calendar, TrendingUp, Command, Bell, User, BookOpen, Zap, Activity, LogOut, GraduationCap } from 'lucide-react';
+import { Search, X, Send, FileText, MoreVertical, ThumbsUp, MessageSquare, Video, Calendar, TrendingUp, Command, Bell, User, BookOpen, Zap, Activity, LogOut, GraduationCap, Languages } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { firestoreService } from '@/lib/firestoreService';
 import { peersService } from '@/lib/peersService';
 import sessionsService from '@/lib/sessionsService';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { signOut } from 'firebase/auth';
-import { auth, db } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
 export default function Dashboard() {
-    const { token, user, isProfessor } = useAuth();
+    const { token, user, isProfessor, studentSession, logout } = useAuth();
     const router = useRouter();
     const [recentSessions, setRecentSessions] = useState<any[]>([]);
     const [recentDoubts, setRecentDoubts] = useState<any[]>([]);
@@ -75,19 +74,11 @@ export default function Dashboard() {
                 const userDocs = await firestoreService.getUserDocuments(user.uid);
 
                 // Get student's class info
-                try {
-                    const studentDoc = await getDoc(doc(db, 'students', user.uid));
-                    if (studentDoc.exists()) {
-                        const data = studentDoc.data();
-                        if (data.classId || data.className) {
-                            setStudentClass({
-                                classId: data.classId || '',
-                                className: data.className || ''
-                            });
-                        }
-                    }
-                } catch (classError) {
-                    console.log('No class info found for student');
+                if (studentSession && (studentSession.classId || studentSession.className)) {
+                    setStudentClass({
+                        classId: studentSession.classId || '',
+                        className: studentSession.className || ''
+                    });
                 }
 
                 setRecentDoubts(doubts.slice(0, 4));
@@ -118,7 +109,7 @@ export default function Dashboard() {
 
     const handleSignOut = async () => {
         try {
-            await signOut(auth);
+            await logout();
             router.push('/');
         } catch (error) {
             console.error('Sign out error:', error);
@@ -290,14 +281,22 @@ export default function Dashboard() {
                                 <p className="text-xs text-slate-500">Jump to your most used features</p>
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                             <button
                                 onClick={() => router.push('/dashboard/notebook')}
                                 className="p-4 bg-white rounded-xl border border-slate-200 hover:border-blue-500 hover:shadow-lg transition-all group"
                             >
                                 <BookOpen className="w-8 h-8 text-blue-500 mb-2 group-hover:scale-110 transition-transform" />
                                 <p className="font-semibold text-slate-800">Neural Notebook</p>
-                                <p className="text-xs text-slate-500">Upload & analyze documents</p>
+                                <p className="text-xs text-slate-500">Analyze documents</p>
+                            </button>
+                            <button
+                                onClick={() => router.push('/dashboard/doc-translator')}
+                                className="p-4 bg-white rounded-xl border border-slate-200 hover:border-indigo-500 hover:shadow-lg transition-all group"
+                            >
+                                <Languages className="w-8 h-8 text-indigo-500 mb-2 group-hover:scale-110 transition-transform" />
+                                <p className="font-semibold text-slate-800">Doc Translator</p>
+                                <p className="text-xs text-slate-500">Translate materials</p>
                             </button>
                             <button
                                 onClick={() => router.push('/dashboard/forum')}
@@ -305,7 +304,7 @@ export default function Dashboard() {
                             >
                                 <MessageSquare className="w-8 h-8 text-green-500 mb-2 group-hover:scale-110 transition-transform" />
                                 <p className="font-semibold text-slate-800">Doubt Forum</p>
-                                <p className="text-xs text-slate-500">Ask & answer questions</p>
+                                <p className="text-xs text-slate-500">Ask & answer</p>
                             </button>
                             <button
                                 onClick={() => router.push('/dashboard/sessions')}
@@ -313,7 +312,7 @@ export default function Dashboard() {
                             >
                                 <Video className="w-8 h-8 text-purple-500 mb-2 group-hover:scale-110 transition-transform" />
                                 <p className="font-semibold text-slate-800">Live Sessions</p>
-                                <p className="text-xs text-slate-500">Join teaching sessions</p>
+                                <p className="text-xs text-slate-500">Join sessions</p>
                             </button>
                             <button
                                 onClick={() => router.push('/dashboard/connect')}
@@ -321,7 +320,15 @@ export default function Dashboard() {
                             >
                                 <User className="w-8 h-8 text-orange-500 mb-2 group-hover:scale-110 transition-transform" />
                                 <p className="font-semibold text-slate-800">Peer Connect</p>
-                                <p className="text-xs text-slate-500">Find study partners</p>
+                                <p className="text-xs text-slate-500">Find partners</p>
+                            </button>
+                            <button
+                                onClick={() => router.push('/dashboard/study-plan')}
+                                className="p-4 bg-white rounded-xl border border-slate-200 hover:border-pink-500 hover:shadow-lg transition-all group"
+                            >
+                                <Calendar className="w-8 h-8 text-pink-500 mb-2 group-hover:scale-110 transition-transform" />
+                                <p className="font-semibold text-slate-800">Study Plan</p>
+                                <p className="text-xs text-slate-500">Plan your week</p>
                             </button>
                         </div>
                     </GlassCard>

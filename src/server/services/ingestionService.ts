@@ -1,5 +1,5 @@
-import * as admin from 'firebase-admin';
-import { db } from '../config/firebase';
+import { admin } from '@/lib/firebase-admin';
+import { db } from '@/lib/firebase-admin';
 import { vertexService } from './vertexService';
 import { DocumentProcessorServiceClient } from '@google-cloud/documentai';
 
@@ -8,7 +8,14 @@ let documentAIClient: DocumentProcessorServiceClient | null = null;
 
 function getDocumentAIClient(): DocumentProcessorServiceClient {
     if (!documentAIClient) {
-        documentAIClient = new DocumentProcessorServiceClient();
+        const credentials = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
+            ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
+            : undefined;
+
+        documentAIClient = new DocumentProcessorServiceClient({
+            credentials,
+            projectId: process.env.GCP_PROJECT_ID || 'sparklink-d72d1'
+        });
     }
     return documentAIClient;
 }
@@ -176,4 +183,6 @@ export const processMaterial = async (courseId: string, materialId: string, gcsP
         });
     }
 };
+
+
 

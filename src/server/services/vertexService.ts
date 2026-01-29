@@ -11,7 +11,15 @@ let embeddingModel: GenerativeModel | null = null;
 
 function getVertexAI(): VertexAI {
     if (!vertex_ai) {
-        vertex_ai = new VertexAI({ project: project, location: location });
+        const authOptions = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
+            ? { credentials: JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY) }
+            : undefined;
+
+        vertex_ai = new VertexAI({
+            project: project,
+            location: location,
+            googleAuthOptions: authOptions
+        });
     }
     return vertex_ai;
 }
@@ -93,7 +101,7 @@ async function searchSimilarChunks(query: string, courseId: string, topK: number
         const queryEmbedding = await getEmbeddings(query);
 
         // 2. Fetch all chunks for the course (Optimization: Cache this or use real Vector DB)
-        const { db } = require('../config/firebase'); // Lazy import to avoid circular dep if any
+        const { db } = require('@/lib/firebase-admin'); // Fixed import path
         const chunksSnap = await db.collection('courses').doc(courseId).collection('chunks').get();
 
         if (chunksSnap.empty) return [];
@@ -118,4 +126,6 @@ async function searchSimilarChunks(query: string, courseId: string, topK: number
         return [];
     }
 }
+
+
 

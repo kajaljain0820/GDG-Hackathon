@@ -20,8 +20,8 @@ const auth = getAuth();
 
 // API Client
 const api = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001/sparklink-d72d1/us-central1/api',
-    // Note: No default Content-Type - let requests specify their own
+    // For Vercel, relative paths work best. In development, it falls back to emulator.
+    baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || (typeof window !== 'undefined' ? '/api' : 'http://localhost:5001/sparklink-d72d1/us-central1/api'),
 });
 
 // Request Interceptor: Attach Token
@@ -62,3 +62,4 @@ export const apiRequest = async (endpoint: string, method: string, body?: any, t
 };
 
 export default api;
+
