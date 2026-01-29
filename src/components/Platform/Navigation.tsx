@@ -92,7 +92,7 @@ export default function Navigation() {
             {/* Links */}
             <div className="flex-1 py-4 flex flex-col gap-2 px-3 overflow-y-auto">
                 {links.map((link, index) => {
-                    const isActive = pathname === link.href || (link.href !== '/dashboard/admin' && pathname.startsWith(link.href));
+                    const isActive = pathname === link.href || (link.href !== '/dashboard/admin' && pathname?.startsWith(link.href));
                     const Icon = link.icon;
                     return (
                         <Link
