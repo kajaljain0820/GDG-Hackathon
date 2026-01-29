@@ -16,7 +16,7 @@ export default function AuthForm() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const router = useRouter();
-    const { professorLogin } = useAuth();
+    const { studentLogin, professorLogin } = useAuth();
 
     // Form States
     const [email, setEmail] = useState('');
@@ -27,16 +27,11 @@ export default function AuthForm() {
         setLoading(true);
 
         try {
-            // Use the unified login function that checks both Firebase Auth and Firestore
-            const result = await professorLogin(email, password);
+            // Use studentLogin - ONLY checks students collection in Firestore
+            const result = await studentLogin(email, password);
 
             if (result.success) {
-                // Check if admin (shouldn't happen in student login, but handle it)
-                if (result.isAdmin) {
-                    router.push('/dashboard/admin');
-                } else {
-                    router.push('/dashboard');
-                }
+                router.push('/dashboard');
             } else {
                 setError(result.error || 'Invalid email or password.');
             }
@@ -53,10 +48,10 @@ export default function AuthForm() {
         setLoading(true);
 
         try {
+            // Use professorLogin - checks admin credentials, then professors collection
             const result = await professorLogin(email, password);
 
             if (result.success) {
-                // Check if the login was an admin login
                 if (result.isAdmin) {
                     router.push('/dashboard/admin');
                 } else {
