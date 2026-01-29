@@ -11,7 +11,8 @@ const validateProfessor = (req: any, res: any, next: any): any => {
         return res.status(401).json({ error: 'Unauthorized' });
     }
     // Extract professor UID from header
-    req.professorUid = authHeader.split('Professor ')[1];
+    const authHeaderParts = authHeader.split('Professor ');
+    req.professorUid = authHeaderParts.length > 1 ? authHeaderParts[1] : undefined;
     next();
 };
 
@@ -52,7 +53,7 @@ router.get('/connections', validateProfessor, async (req, res) => {
 // Get escalated doubts for a course
 router.get('/doubts/:courseId', validateProfessor, async (req, res) => {
     try {
-        const { courseId } = req.params;
+        const courseId = req.params.courseId as string;
 
         const doubtsSnapshot = await db.collection('doubts')
             .where('courseId', '==', courseId)
@@ -74,7 +75,7 @@ router.get('/doubts/:courseId', validateProfessor, async (req, res) => {
 // Get confusion insights for a course
 router.get('/insights/:courseId', validateProfessor, async (req, res) => {
     try {
-        const { courseId } = req.params;
+        const courseId = req.params.courseId as string;
 
         // Get all doubts for the course and analyze topics
         const doubtsSnapshot = await db.collection('doubts')
@@ -118,7 +119,7 @@ router.get('/insights/:courseId', validateProfessor, async (req, res) => {
 // Get sessions for a course
 router.get('/sessions/:courseId', validateProfessor, async (req, res) => {
     try {
-        const { courseId } = req.params;
+        const courseId = req.params.courseId as string;
 
         // Query teachingSessions collection (not 'sessions')
         const sessionsSnapshot = await db.collection('teachingSessions')
@@ -140,7 +141,7 @@ router.get('/sessions/:courseId', validateProfessor, async (req, res) => {
 // Reply to a doubt (professor)
 router.post('/doubts/:doubtId/reply', validateProfessor, async (req, res) => {
     try {
-        const { doubtId } = req.params;
+        const doubtId = req.params.doubtId as string;
         const { content, professorName, professorUid } = req.body;
 
         if (!content) {

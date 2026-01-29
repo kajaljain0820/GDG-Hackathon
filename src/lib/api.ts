@@ -20,8 +20,8 @@ const auth = getAuth();
 
 // API Client
 const api = axios.create({
-    // For Vercel, relative paths work best. In development, it falls back to emulator.
-    baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || (typeof window !== 'undefined' ? '/api' : 'http://localhost:5001/sparklink-d72d1/us-central1/api'),
+    // For Vercel, relative paths work best. In development, it falls back to root-relative /api.
+    baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || '/api',
 });
 
 // Request Interceptor: Attach Token

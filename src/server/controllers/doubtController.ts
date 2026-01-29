@@ -56,7 +56,7 @@ export const createDoubt = async (req: Request, res: Response) => {
 
 export const getDoubts = async (req: Request, res: Response) => {
     try {
-        const { courseId } = req.query;
+        const courseId = req.query.courseId as string;
         let query = db.collection('doubts').orderBy('createdAt', 'desc');
 
         if (courseId) {
