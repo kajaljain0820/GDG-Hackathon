@@ -50,6 +50,7 @@ export async function createUserProfile(profileData: Partial<UserProfile>): Prom
             bio: profileData.bio || '',
             interests: profileData.interests || [],
             photoURL: profileData.photoURL || null,
+            role: profileData.role || 'student',
             isOnline: true,
             lastSeen: serverTimestamp(),
             createdAt: serverTimestamp()

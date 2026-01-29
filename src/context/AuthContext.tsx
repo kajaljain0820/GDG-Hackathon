@@ -1,9 +1,15 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, signOut as firebaseSignOut } from 'firebase/auth';
-import { auth, db } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
+
+interface BaseUser {
+    uid: string;
+    email: string;
+    displayName: string;
+    role: 'student' | 'professor' | 'admin';
+}
 
 interface StudentSession {
     role: 'student';
@@ -32,7 +38,7 @@ interface AdminSession {
 }
 
 interface AuthContextType {
-    user: User | null;
+    user: BaseUser | null;
     loading: boolean;
     logout: () => Promise<void>;
     token: string | null;
@@ -67,12 +73,12 @@ export const useAuth = () => useContext(AuthContext);
 const ADMIN_EMAIL = 'admin@gmail.com';
 const ADMIN_PASSWORD = 'admin@123';
 
-// Fallback professor credentials (when backend is not available)
+// Fallback professor credentials
 const PROFESSOR_EMAIL = 'professor@gmail.com';
 const PROFESSOR_PASSWORD = 'professor@123';
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-    const [user, setUser] = useState<User | null>(null);
+    const [user, setUser] = useState<BaseUser | null>(null);
     const [loading, setLoading] = useState(true);
     const [token, setToken] = useState<string | null>(null);
     const [isProfessor, setIsProfessor] = useState(false);
@@ -92,10 +98,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 setAdminSession(session);
                 setIsAdmin(true);
                 setToken(`Admin ${session.uid}`);
+                setUser({
+                    uid: session.uid,
+                    email: session.email,
+                    displayName: session.name,
+                    role: 'admin'
+                });
                 setLoading(false);
                 return;
             } catch (e) {
-                console.error('Invalid admin session');
                 localStorage.removeItem('adminSession');
             }
         }
@@ -108,10 +119,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 setProfessorSession(session);
                 setIsProfessor(true);
                 setToken(`Professor ${session.uid}`);
+                setUser({
+                    uid: session.uid,
+                    email: session.email,
+                    displayName: session.name,
+                    role: 'professor'
+                });
                 setLoading(false);
                 return;
             } catch (e) {
-                console.error('Invalid professor session');
                 localStorage.removeItem('professorSession');
             }
         }
@@ -124,66 +140,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 setStudentSession(session);
                 setIsStudent(true);
                 setToken(`Student ${session.uid}`);
-                // Create pseudo-user for compatibility
                 setUser({
                     uid: session.uid,
                     email: session.email,
                     displayName: session.name,
-                    emailVerified: true,
-                    isAnonymous: false,
-                    metadata: {},
-                    providerData: [],
-                    refreshToken: '',
-                    tenantId: null,
-                    delete: async () => { },
-                    getIdToken: async () => `Student ${session.uid}`,
-                    getIdTokenResult: async () => ({ claims: { role: 'student' }, token: '', authTime: '', issuedAtTime: '', expirationTime: '', signInProvider: null, signInSecondFactor: null }),
-                    reload: async () => { },
-                    toJSON: () => session,
-                    phoneNumber: null,
-                    photoURL: null,
-                    providerId: 'firestore'
-                } as any);
+                    role: 'student'
+                });
                 setLoading(false);
-                console.log('✅ Student session restored');
                 return;
             } catch (e) {
-                console.error('Invalid student session');
                 localStorage.removeItem('studentSession');
             }
         }
 
-        // No stored session found
         setLoading(false);
     }, []);
 
-    // Student Login - ONLY checks Firestore students collection
     const studentLogin = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
         try {
-            console.log('🎓 Attempting student login via Firestore...');
-
-            // Query students collection
-            const studentQuery = query(
-                collection(db, 'students'),
-                where('email', '==', email)
-            );
+            const studentQuery = query(collection(db, 'students'), where('email', '==', email));
             const studentSnapshot = await getDocs(studentQuery);
 
-            if (studentSnapshot.empty) {
-                console.log('❌ No student found with this email');
-                return { success: false, error: 'Invalid email or password' };
-            }
+            if (studentSnapshot.empty) return { success: false, error: 'Invalid email or password' };
 
             const studentDoc = studentSnapshot.docs[0];
             const studentData = studentDoc.data();
 
-            // Check password
-            if (studentData.password !== password) {
-                console.log('❌ Password mismatch');
-                return { success: false, error: 'Invalid email or password' };
-            }
+            if (studentData.password !== password) return { success: false, error: 'Invalid email or password' };
 
-            // Create student session
             const session: StudentSession = {
                 role: 'student',
                 uid: studentDoc.id,
@@ -198,41 +182,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setStudentSession(session);
             setIsStudent(true);
             setToken(`Student ${studentDoc.id}`);
-            localStorage.setItem('studentSession', JSON.stringify(session));
-
-            // Create pseudo-user for compatibility
             setUser({
                 uid: studentDoc.id,
-                email: studentData.email,
-                displayName: studentData.name,
-                emailVerified: true,
-                isAnonymous: false,
-                metadata: {},
-                providerData: [],
-                refreshToken: '',
-                tenantId: null,
-                delete: async () => { },
-                getIdToken: async () => `Student ${studentDoc.id}`,
-                getIdTokenResult: async () => ({ claims: { role: 'student' }, token: '', authTime: '', issuedAtTime: '', expirationTime: '', signInProvider: null, signInSecondFactor: null }),
-                reload: async () => { },
-                toJSON: () => session,
-                phoneNumber: null,
-                photoURL: null,
-                providerId: 'firestore'
-            } as any);
+                email: session.email,
+                displayName: session.name,
+                role: 'student'
+            });
+            localStorage.setItem('studentSession', JSON.stringify(session));
 
-            console.log('✅ Student login successful');
             return { success: true };
-
         } catch (error: any) {
-            console.error('Student login error:', error);
             return { success: false, error: 'Login failed. Please try again.' };
         }
     };
 
-    // Professor Login - Checks admin credentials, hardcoded prof, then Firestore professors collection
     const professorLogin = async (email: string, password: string): Promise<{ success: boolean; error?: string; isAdmin?: boolean }> => {
-        // Check for admin credentials first
         if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
             const adminSessionData: AdminSession = {
                 role: 'admin',
@@ -244,13 +208,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setAdminSession(adminSessionData);
             setIsAdmin(true);
             setToken(`Admin ${adminSessionData.uid}`);
+            setUser({
+                uid: adminSessionData.uid,
+                email: adminSessionData.email,
+                displayName: adminSessionData.name,
+                role: 'admin'
+            });
             localStorage.setItem('adminSession', JSON.stringify(adminSessionData));
-
-            console.log('✅ Admin login successful');
             return { success: true, isAdmin: true };
         }
 
-        // Check for hardcoded professor credentials (fallback)
         if (email === PROFESSOR_EMAIL && password === PROFESSOR_PASSWORD) {
             const professorSessionData: ProfessorSession = {
                 role: 'professor',
@@ -262,37 +229,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setProfessorSession(professorSessionData);
             setIsProfessor(true);
             setToken(`Professor ${professorSessionData.uid}`);
+            setUser({
+                uid: professorSessionData.uid,
+                email: professorSessionData.email,
+                displayName: professorSessionData.name,
+                role: 'professor'
+            });
             localStorage.setItem('professorSession', JSON.stringify(professorSessionData));
-
-            console.log('✅ Professor login successful (fallback credentials)');
             return { success: true };
         }
 
-        // Check Firestore professors collection
         try {
-            console.log('👨‍🏫 Attempting professor login via Firestore...');
-
-            const professorQuery = query(
-                collection(db, 'professors'),
-                where('email', '==', email)
-            );
+            const professorQuery = query(collection(db, 'professors'), where('email', '==', email));
             const professorSnapshot = await getDocs(professorQuery);
 
-            if (professorSnapshot.empty) {
-                console.log('❌ No professor found with this email');
-                return { success: false, error: 'Invalid email or password' };
-            }
+            if (professorSnapshot.empty) return { success: false, error: 'Invalid email or password' };
 
             const professorDoc = professorSnapshot.docs[0];
             const professorData = professorDoc.data();
 
-            // Check password
-            if (professorData.password !== password) {
-                console.log('❌ Password mismatch');
-                return { success: false, error: 'Invalid email or password' };
-            }
+            if (professorData.password !== password) return { success: false, error: 'Invalid email or password' };
 
-            // Create professor session
             const session: ProfessorSession = {
                 role: 'professor',
                 uid: professorDoc.id,
@@ -304,46 +261,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setProfessorSession(session);
             setIsProfessor(true);
             setToken(`Professor ${professorDoc.id}`);
+            setUser({
+                uid: professorDoc.id,
+                email: session.email,
+                displayName: session.name,
+                role: 'professor'
+            });
             localStorage.setItem('professorSession', JSON.stringify(session));
-
-            console.log('✅ Professor login successful (Firestore)');
             return { success: true };
-
         } catch (error: any) {
-            console.error('Professor login error:', error);
             return { success: false, error: 'Login failed. Please try again.' };
         }
     };
 
     const logout = async () => {
-        if (isAdmin) {
-            setAdminSession(null);
-            setIsAdmin(false);
-            setToken(null);
-            localStorage.removeItem('adminSession');
-        } else if (isProfessor) {
-            setProfessorSession(null);
-            setIsProfessor(false);
-            setToken(null);
-            localStorage.removeItem('professorSession');
-        } else if (isStudent) {
-            setStudentSession(null);
-            setIsStudent(false);
-            setUser(null);
-            setToken(null);
-            localStorage.removeItem('studentSession');
-        } else {
-            // Legacy Firebase Auth logout
-            setUser(null);
-            setToken(null);
-            try {
-                await firebaseSignOut(auth);
-            } catch (e) {
-                // Ignore
-            }
-        }
-
-        // Clear Google OAuth access token
+        setAdminSession(null);
+        setProfessorSession(null);
+        setStudentSession(null);
+        setIsAdmin(false);
+        setIsProfessor(false);
+        setIsStudent(false);
+        setUser(null);
+        setToken(null);
+        localStorage.removeItem('adminSession');
+        localStorage.removeItem('professorSession');
+        localStorage.removeItem('studentSession');
         localStorage.removeItem('googleAccessToken');
     };
 

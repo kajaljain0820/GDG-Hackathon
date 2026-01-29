@@ -15,8 +15,8 @@ import ChatModal from '@/components/ChatModal';
 import { Sparkles as SparklesIcon } from 'lucide-react';
 
 export default function ConnectPage() {
-    const { user, professorSession } = useAuth();
-    const currentUserId = user?.uid || professorSession?.uid;
+    const { user, professorSession, studentSession, adminSession, isAdmin } = useAuth();
+    const currentUserId = user?.uid || studentSession?.uid || professorSession?.uid || adminSession?.uid;
 
     const { notificationsEnabled, setNotificationsEnabled, recommendedPartners } = useNotifications();
     const [peers, setPeers] = useState<UserProfile[]>([]);
@@ -38,51 +38,75 @@ export default function ConnectPage() {
 
             try {
                 // Create/update current user's profile ONLY if it's a student
-                if (user?.uid && !professorSession) {
+                if (studentSession && !professorSession && !isAdmin) {
                     await peersService.createUserProfile({
-                        userId: user.uid,
-                        displayName: user.displayName || '',
-                        email: user.email || '',
-                        department: 'Computer Science',
-                        year: 3,
-                        interests: ['AI', 'Web Development'],
-                        photoURL: user.photoURL
+                        userId: studentSession.uid,
+                        displayName: studentSession.name || '',
+                        email: studentSession.email || '',
+                        department: studentSession.department || 'Computer Science',
+                        year: parseInt(studentSession.year) || 1,
+                        interests: ['AI', 'Web Development'], // Default interests
+                        photoURL: null
                     });
                 }
 
                 // Load all discovery profiles from peersService
-                const discoveryUsers = await peersService.getAllUsers();
+                let discoveryUsers: UserProfile[] = [];
+                try {
+                    discoveryUsers = await peersService.getAllUsers();
+                } catch (e) {
+                    console.error("Failed to load discovery users:", e);
+                }
 
                 // Load all students added by admin
-                const adminStudents = await adminService.getStudents();
+                let adminStudents: any[] = [];
+                try {
+                    adminStudents = await adminService.getStudents();
+                    console.log(`Fetched ${adminStudents.length} students from adminService`);
+                } catch (e) {
+                    console.error("Failed to load admin students:", e);
+                }
 
                 // Map admin students to UserProfile format
                 const mappedAdminStudents: UserProfile[] = adminStudents.map(s => ({
-                    userId: s.id!,
-                    displayName: s.name,
-                    email: s.email,
-                    department: s.department,
+                    userId: s.id || s.uid || 'unknown',
+                    displayName: s.name || s.displayName || 'Unnamed Student',
+                    email: s.email || '',
+                    department: s.department || 'General',
                     year: parseInt(s.year) || 1,
                     role: 'student',
                     isOnline: false,
-                    interests: [],
+                    interests: s.interests || [],
                     lastSeen: s.updatedAt || new Date(),
                     createdAt: s.createdAt || new Date()
                 }));
 
-                // Combine both lists
-                let allUsers = [...discoveryUsers];
+                // Combine and Deduplicate using a Map
+                const allUsersMap = new Map<string, UserProfile>();
 
-                // Add admin students if they aren't already in discoveryUsers (by email or userId)
-                mappedAdminStudents.forEach(adminStudent => {
-                    const existing = allUsers.find(u => u.email === adminStudent.email || u.userId === adminStudent.userId);
-                    if (!existing) {
-                        allUsers.push(adminStudent);
+                // 1. Add discovery users first
+                discoveryUsers.forEach(u => {
+                    if (u.userId) allUsersMap.set(u.userId, u);
+                });
+
+                // 2. Add/Override with admin students
+                mappedAdminStudents.forEach(s => {
+                    if (!s.userId || s.userId === 'unknown') return;
+
+                    const existing = allUsersMap.get(s.userId);
+                    if (existing) {
+                        allUsersMap.set(s.userId, {
+                            ...existing,
+                            role: 'student', // Admin students are always students
+                            displayName: existing.displayName || s.displayName,
+                            department: existing.department || s.department,
+                        });
                     } else {
-                        // Update existing with admin data if needed
-                        if (!existing.role) existing.role = 'student';
+                        allUsersMap.set(s.userId, s);
                     }
                 });
+
+                let allUsers = Array.from(allUsersMap.values());
 
                 // Load connections
                 const userConnections = await peersService.getUserConnections(currentUserId);
@@ -109,8 +133,14 @@ export default function ConnectPage() {
                     }
                 }
 
-                // Filter out current user
-                const otherUsers = allUsers.filter(u => u.userId !== currentUserId);
+                // Filter out current user and any test entries
+                const EXCLUDED_NAMES = ['chaman', 'jk', 'rohan s. kapadi'];
+                const otherUsers = allUsers.filter(u => {
+                    const isCurrentUser = u.userId === currentUserId;
+                    const name = (u.displayName || (u as any).name || '').toLowerCase();
+                    const isExcluded = EXCLUDED_NAMES.some(excluded => name.includes(excluded));
+                    return !isCurrentUser && !isExcluded;
+                });
 
                 // Remove duplicates (just in case)
                 let uniqueUsers = Array.from(new Map(otherUsers.map(item => [item.userId, item])).values());
@@ -253,10 +283,14 @@ export default function ConnectPage() {
 
     // Filter peers
     const filteredPeers = peers.filter(peer => {
-        const matchesSearch = peer.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            peer.department.toLowerCase().includes(searchQuery.toLowerCase());
+        const name = peer.displayName?.toLowerCase() || '';
+        const dept = peer.department?.toLowerCase() || '';
+        const search = searchQuery.toLowerCase();
+
+        const matchesSearch = name.includes(search) || dept.includes(search);
         const matchesDept = filterDepartment === 'all' || peer.department === filterDepartment;
-        const matchesYear = filterYear === 'all' || peer.year.toString() === filterYear;
+        const matchesYear = filterYear === 'all' || peer.year?.toString() === filterYear;
+
         return matchesSearch && matchesDept && matchesYear;
     });
 
@@ -474,93 +508,99 @@ export default function ConnectPage() {
                         )}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {recommendedPartners.slice(0, 6).map(partner => {
-                            const connectionInfo = getConnectionStatus(partner.uid);
-                            const isConnected = connectionInfo.status === 'connected';
-                            const isPendingSent = connectionInfo.status === 'pending_sent';
+                        {recommendedPartners
+                            .filter(p => {
+                                const name = (p.displayName || '').toLowerCase();
+                                const EXCLUDED_NAMES = ['chaman', 'jk', 'rohan s. kapadi'];
+                                return !EXCLUDED_NAMES.some(excluded => name.includes(excluded));
+                            })
+                            .slice(0, 6).map(partner => {
+                                const connectionInfo = getConnectionStatus(partner.uid);
+                                const isConnected = connectionInfo.status === 'connected';
+                                const isPendingSent = connectionInfo.status === 'pending_sent';
 
-                            return (
-                                <motion.div
-                                    key={partner.uid}
-                                    initial={{ opacity: 0, scale: 0.9 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    transition={{ duration: 0.3 }}
-                                >
-                                    <GlassCard className="p-5 border-purple-200 bg-gradient-to-br from-purple-50 via-white to-blue-50 hover:shadow-xl transition-all">
-                                        {/* Partner Header */}
-                                        <div className="flex items-start gap-3 mb-3">
-                                            <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-purple-500 to-pink-600 flex items-center justify-center text-white font-bold text-lg relative">
-                                                {partner.displayName.charAt(0)}
-                                                {/* Active indicator */}
-                                                <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full animate-pulse"></span>
+                                return (
+                                    <motion.div
+                                        key={partner.uid}
+                                        initial={{ opacity: 0, scale: 0.9 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        transition={{ duration: 0.3 }}
+                                    >
+                                        <GlassCard className="p-5 border-purple-200 bg-gradient-to-br from-purple-50 via-white to-blue-50 hover:shadow-xl transition-all">
+                                            {/* Partner Header */}
+                                            <div className="flex items-start gap-3 mb-3">
+                                                <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-purple-500 to-pink-600 flex items-center justify-center text-white font-bold text-lg relative">
+                                                    {partner.displayName.charAt(0)}
+                                                    {/* Active indicator */}
+                                                    <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full animate-pulse"></span>
+                                                </div>
+                                                <div className="flex-1">
+                                                    <h3 className="font-bold text-slate-900">{partner.displayName}</h3>
+                                                    <p className="text-xs text-slate-500">{partner.department} • Year {partner.academicYear}</p>
+                                                </div>
                                             </div>
-                                            <div className="flex-1">
-                                                <h3 className="font-bold text-slate-900">{partner.displayName}</h3>
-                                                <p className="text-xs text-slate-500">{partner.department} • Year {partner.academicYear}</p>
-                                            </div>
-                                        </div>
 
-                                        {/* Currently Studying Badge */}
-                                        <div className="mb-3 space-y-1">
-                                            <div className="flex items-center gap-1.5 text-xs text-purple-700 font-medium">
-                                                <BookOpen className="w-3.5 h-3.5" />
-                                                <span>Currently studying:</span>
+                                            {/* Currently Studying Badge */}
+                                            <div className="mb-3 space-y-1">
+                                                <div className="flex items-center gap-1.5 text-xs text-purple-700 font-medium">
+                                                    <BookOpen className="w-3.5 h-3.5" />
+                                                    <span>Currently studying:</span>
+                                                </div>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {partner.matchedTopics.slice(0, 2).map((topic, idx) => (
+                                                        <span
+                                                            key={idx}
+                                                            className="px-2.5 py-1 bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 text-xs rounded-full font-medium border border-purple-200"
+                                                        >
+                                                            {topic}
+                                                        </span>
+                                                    ))}
+                                                    {partner.matchedTopics.length > 2 && (
+                                                        <span className="px-2 py-1 text-xs text-slate-500">
+                                                            +{partner.matchedTopics.length - 2} more
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
-                                            <div className="flex flex-wrap gap-1.5">
-                                                {partner.matchedTopics.slice(0, 2).map((topic, idx) => (
-                                                    <span
-                                                        key={idx}
-                                                        className="px-2.5 py-1 bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 text-xs rounded-full font-medium border border-purple-200"
+
+                                            {/* Activity Timestamp */}
+                                            <div className="text-xs text-slate-400 mb-3 flex items-center gap-1">
+                                                <Clock className="w-3 h-3" />
+                                                <span>Active {getTimeAgo(partner.lastActiveAt)}</span>
+                                            </div>
+
+                                            {/* Action Buttons */}
+                                            {isConnected ? (
+                                                <div className="flex gap-2">
+                                                    <Button className="flex-1 bg-green-600 hover:bg-green-700 text-white gap-2 text-sm h-9">
+                                                        <CheckCircle className="w-4 h-4" />
+                                                        Connected
+                                                    </Button>
+                                                    <Button
+                                                        onClick={() => openChat(partner.uid, partner.displayName, connectionInfo.connectionId)}
+                                                        className="bg-blue-600 hover:bg-blue-700 text-white p-2"
                                                     >
-                                                        {topic}
-                                                    </span>
-                                                ))}
-                                                {partner.matchedTopics.length > 2 && (
-                                                    <span className="px-2 py-1 text-xs text-slate-500">
-                                                        +{partner.matchedTopics.length - 2} more
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Activity Timestamp */}
-                                        <div className="text-xs text-slate-400 mb-3 flex items-center gap-1">
-                                            <Clock className="w-3 h-3" />
-                                            <span>Active {getTimeAgo(partner.lastActiveAt)}</span>
-                                        </div>
-
-                                        {/* Action Buttons */}
-                                        {isConnected ? (
-                                            <div className="flex gap-2">
-                                                <Button className="flex-1 bg-green-600 hover:bg-green-700 text-white gap-2 text-sm h-9">
-                                                    <CheckCircle className="w-4 h-4" />
-                                                    Connected
+                                                        <MessageCircle className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
+                                            ) : isPendingSent ? (
+                                                <Button disabled className="w-full bg-gray-400 text-white gap-2 text-sm h-9 cursor-not-allowed">
+                                                    <Clock className="w-4 h-4" />
+                                                    Request Sent
                                                 </Button>
+                                            ) : (
                                                 <Button
-                                                    onClick={() => openChat(partner.uid, partner.displayName, connectionInfo.connectionId)}
-                                                    className="bg-blue-600 hover:bg-blue-700 text-white p-2"
+                                                    onClick={() => handleConnect(partner.uid)}
+                                                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white gap-2 text-sm h-9"
                                                 >
-                                                    <MessageCircle className="w-4 h-4" />
+                                                    <UserPlus className="w-4 h-4" />
+                                                    Connect
                                                 </Button>
-                                            </div>
-                                        ) : isPendingSent ? (
-                                            <Button disabled className="w-full bg-gray-400 text-white gap-2 text-sm h-9 cursor-not-allowed">
-                                                <Clock className="w-4 h-4" />
-                                                Request Sent
-                                            </Button>
-                                        ) : (
-                                            <Button
-                                                onClick={() => handleConnect(partner.uid)}
-                                                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white gap-2 text-sm h-9"
-                                            >
-                                                <UserPlus className="w-4 h-4" />
-                                                Connect
-                                            </Button>
-                                        )}
-                                    </GlassCard>
-                                </motion.div>
-                            );
-                        })}
+                                            )}
+                                        </GlassCard>
+                                    </motion.div>
+                                );
+                            })}
                     </div>
                 </div>
             )}

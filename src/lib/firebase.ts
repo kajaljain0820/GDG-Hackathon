@@ -1,5 +1,4 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
 
@@ -20,7 +19,6 @@ if (!firebaseConfig.apiKey || firebaseConfig.apiKey === 'undefined') {
 
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
@@ -35,4 +33,4 @@ if (process.env.NODE_ENV === 'development') {
 }
 */
 
-export { auth, db, storage };
+export { db, storage };

@@ -28,7 +28,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import firestoreService, { Doubt, Reply } from '@/lib/firestoreService';
 
 export default function ForumPage() {
-    const { token, user } = useAuth();
+    const { user, isStudent, isProfessor, isAdmin, studentSession, professorSession, adminSession } = useAuth();
     const [doubts, setDoubts] = useState<Doubt[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -77,9 +77,9 @@ export default function ForumPage() {
                 courseId: 'CS101',
                 content: newDoubtContent.trim(),
                 askedBy: {
-                    name: user?.displayName || user?.email?.split('@')[0] || 'Student',
-                    uid: user?.uid || `guest_${Date.now()}`,
-                    email: user?.email || undefined
+                    name: studentSession?.name || professorSession?.name || adminSession?.name || user?.displayName || user?.email?.split('@')[0] || 'Member',
+                    uid: studentSession?.uid || professorSession?.uid || adminSession?.uid || user?.uid || `guest_${Date.now()}`,
+                    email: studentSession?.email || professorSession?.email || adminSession?.email || user?.email || undefined
                 },
                 tags: [],
                 status: 'OPEN' as const,  // Start as OPEN so everyone can see and answer
@@ -131,9 +131,9 @@ export default function ForumPage() {
             await firestoreService.addReplyToDoubt(doubtId, {
                 content: content.trim(),
                 repliedBy: {
-                    name: user?.displayName || user?.email?.split('@')[0] || 'Anonymous Student',
-                    uid: user?.uid || `guest_${Date.now()}`,
-                    role: 'STUDENT'
+                    name: studentSession?.name || professorSession?.name || adminSession?.name || user?.displayName || user?.email?.split('@')[0] || 'Anonymous Member',
+                    uid: studentSession?.uid || professorSession?.uid || adminSession?.uid || user?.uid || `guest_${Date.now()}`,
+                    role: isProfessor || isAdmin ? 'PROFESSOR' : 'STUDENT'
                 },
                 isAi: false,
                 isAccepted: false
@@ -435,8 +435,8 @@ export default function ForumPage() {
                                                                 <div
                                                                     key={reply.replyId}
                                                                     className={`p-4 rounded-xl text-sm ${reply.isAccepted
-                                                                            ? 'bg-green-50 border-2 border-green-300'
-                                                                            : 'bg-white border border-slate-200'
+                                                                        ? 'bg-green-50 border-2 border-green-300'
+                                                                        : 'bg-white border border-slate-200'
                                                                         }`}
                                                                 >
                                                                     <div className="flex justify-between items-start mb-2">

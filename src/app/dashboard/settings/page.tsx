@@ -8,12 +8,11 @@ import { User, Lock, Mail, Save, Camera, ArrowLeft, Shield, Bell, Globe, LogOut,
 import { motion } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { updateProfile, updatePassword, updateEmail, signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { firestoreService } from '@/lib/firestoreService';
 import GoogleServicesConnect from '@/components/GoogleServicesConnect';
 
 export default function SettingsPage() {
-    const { user } = useAuth();
+    const { user, studentSession, professorSession, isAdmin, logout } = useAuth();
     const router = useRouter();
     const [activeTab, setActiveTab] = useState('profile');
     const [loading, setLoading] = useState(false);
@@ -36,31 +35,41 @@ export default function SettingsPage() {
         if (user) {
             setDisplayName(user.displayName || '');
             setEmail(user.email || '');
-            setPhotoURL(user.photoURL || '');
+
+            // Populate based on detailed session if available
+            if (studentSession) {
+                setDepartment(studentSession.department || 'Computer Science');
+                setYear(studentSession.year || '1');
+            } else if (professorSession) {
+                setDepartment(professorSession.department || 'Computer Science');
+            }
         }
-    }, [user]);
+    }, [user, studentSession, professorSession]);
 
     const handleUpdateProfile = async () => {
-        if (!user) return;
+        if (!user || isAdmin) return;
         setLoading(true);
         setMessage({ type: '', text: '' });
 
         try {
-            await updateProfile(user, {
-                displayName,
-                photoURL
+            await firestoreService.updateFirestoreUser(user.uid, user.role, {
+                name: displayName,
+                displayName: displayName,
+                department,
+                year,
+                bio
             });
 
-            setMessage({ type: 'success', text: 'Profile updated successfully!' });
+            setMessage({ type: 'success', text: 'Profile updated in Firestore successfully!' });
         } catch (error: any) {
-            setMessage({ type: 'error', text: error.message });
+            setMessage({ type: 'error', text: error.message || 'Update failed' });
         } finally {
             setLoading(false);
         }
     };
 
     const handleChangePassword = async () => {
-        if (!user) return;
+        if (!user || isAdmin) return;
 
         if (newPassword !== confirmPassword) {
             setMessage({ type: 'error', text: 'Passwords do not match!' });
@@ -76,13 +85,15 @@ export default function SettingsPage() {
         setMessage({ type: '', text: '' });
 
         try {
-            await updatePassword(user, newPassword);
-            setMessage({ type: 'success', text: 'Password changed successfully!' });
+            await firestoreService.updateFirestoreUser(user.uid, user.role, {
+                password: newPassword
+            });
+            setMessage({ type: 'success', text: 'Password updated successfully!' });
             setCurrentPassword('');
             setNewPassword('');
             setConfirmPassword('');
         } catch (error: any) {
-            setMessage({ type: 'error', text: error.message });
+            setMessage({ type: 'error', text: 'Failed to update password' });
         } finally {
             setLoading(false);
         }
@@ -90,7 +101,7 @@ export default function SettingsPage() {
 
     const handleSignOut = async () => {
         try {
-            await signOut(auth);
+            await logout();
             router.push('/');
         } catch (error: any) {
             console.error('Sign out error:', error);

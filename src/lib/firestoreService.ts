@@ -454,8 +454,29 @@ export async function getSessions(filters?: {
     }
 }
 
+// Update user profile in Firestore
+export async function updateFirestoreUser(uid: string, role: string, data: any): Promise<void> {
+    try {
+        const collectionName = role === 'student' ? 'students' : role === 'professor' ? 'professors' : null;
+        if (!collectionName) return;
+
+        const userRef = doc(db, collectionName, uid);
+        await updateDoc(userRef, {
+            ...data,
+            updatedAt: serverTimestamp()
+        });
+        console.log(`✅ ${role} profile updated in Firestore:`, uid);
+    } catch (error) {
+        console.error('❌ Error updating user profile:', error);
+        throw error;
+    }
+}
+
 // Export all services
 export const firestoreService = {
+    // Users
+    updateFirestoreUser,
+
     // Doubts
     createDoubt,
     getDoubts,
