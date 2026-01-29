@@ -4,12 +4,13 @@ import { useState, useEffect } from 'react';
 import GlassCard from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { User, Lock, Mail, Save, Camera, ArrowLeft, Shield, Bell, Globe, LogOut } from 'lucide-react';
+import { User, Lock, Mail, Save, Camera, ArrowLeft, Shield, Bell, Globe, LogOut, Link as LinkIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { updateProfile, updatePassword, updateEmail, signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import GoogleServicesConnect from '@/components/GoogleServicesConnect';
 
 export default function SettingsPage() {
     const { user } = useAuth();
@@ -99,6 +100,7 @@ export default function SettingsPage() {
 
     const tabs = [
         { id: 'profile', label: 'Profile', icon: User },
+        { id: 'integrations', label: 'Integrations', icon: LinkIcon },
         { id: 'security', label: 'Security', icon: Shield },
         { id: 'notifications', label: 'Notifications', icon: Bell },
     ];
@@ -256,6 +258,21 @@ export default function SettingsPage() {
                                 </Button>
                             </div>
                         </GlassCard>
+                    )}
+
+                    {activeTab === 'integrations' && (
+                        <div className="space-y-6">
+                            <GlassCard className="p-8">
+                                <h2 className="text-2xl font-bold text-slate-800 mb-2">Integrations</h2>
+                                <p className="text-slate-500 mb-6">Connect external services to enhance your learning experience</p>
+
+                                {/* Google Services */}
+                                <GoogleServicesConnect
+                                    onSuccess={() => setMessage({ type: 'success', text: 'Google account connected successfully!' })}
+                                    onError={(err) => setMessage({ type: 'error', text: err })}
+                                />
+                            </GlassCard>
+                        </div>
                     )}
 
                     {activeTab === 'security' && (

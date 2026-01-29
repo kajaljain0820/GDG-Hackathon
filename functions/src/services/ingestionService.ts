@@ -3,8 +3,15 @@ import { db } from '../config/firebase';
 import { vertexService } from './vertexService';
 import { DocumentProcessorServiceClient } from '@google-cloud/documentai';
 
-// Initialize Document AI Client
-const client = new DocumentProcessorServiceClient();
+// Lazy initialization for Document AI Client to avoid module-level timeout
+let documentAIClient: DocumentProcessorServiceClient | null = null;
+
+function getDocumentAIClient(): DocumentProcessorServiceClient {
+    if (!documentAIClient) {
+        documentAIClient = new DocumentProcessorServiceClient();
+    }
+    return documentAIClient;
+}
 
 interface Chunk {
     id: string;
@@ -59,7 +66,7 @@ const extractTextWithDocAI = async (buffer: Buffer, mimeType: string): Promise<s
             },
         };
 
-        const [result] = await client.processDocument(request);
+        const [result] = await getDocumentAIClient().processDocument(request);
         const { document } = result;
         return document?.text || '';
     } catch (error) {

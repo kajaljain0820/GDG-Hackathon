@@ -1,28 +1,45 @@
-import { VertexAI } from '@google-cloud/vertexai';
+import { VertexAI, GenerativeModel } from '@google-cloud/vertexai';
 
-// Initialize Vertex AI
+// Lazy initialization for Vertex AI to avoid module-level timeout
 // Note: These values should be in environment variables
 const project = process.env.GCP_PROJECT_ID || 'echo-1928rn';
 const location = process.env.GCP_LOCATION || 'us-central1';
 
-const vertex_ai = new VertexAI({ project: project, location: location });
+let vertex_ai: VertexAI | null = null;
+let generativeModel: GenerativeModel | null = null;
+let embeddingModel: GenerativeModel | null = null;
 
-// Gemini Model for Generation
-const generativeModel = vertex_ai.getGenerativeModel({
-    model: 'gemini-1.5-flash-preview-0514',
-    generationConfig: {
-        'maxOutputTokens': 2048,
-        'temperature': 0.7,
-        'topP': 0.8,
-    },
-});
+function getVertexAI(): VertexAI {
+    if (!vertex_ai) {
+        vertex_ai = new VertexAI({ project: project, location: location });
+    }
+    return vertex_ai;
+}
 
-// Embedding Model
-const embeddingModel = vertex_ai.getGenerativeModel({ model: 'text-embedding-004' });
+function getGenerativeModel(): GenerativeModel {
+    if (!generativeModel) {
+        generativeModel = getVertexAI().getGenerativeModel({
+            model: 'gemini-1.5-flash-preview-0514',
+            generationConfig: {
+                'maxOutputTokens': 2048,
+                'temperature': 0.7,
+                'topP': 0.8,
+            },
+        });
+    }
+    return generativeModel;
+}
+
+function getEmbeddingModel(): GenerativeModel {
+    if (!embeddingModel) {
+        embeddingModel = getVertexAI().getGenerativeModel({ model: 'text-embedding-004' });
+    }
+    return embeddingModel;
+}
 
 async function getEmbeddings(text: string): Promise<number[]> {
     try {
-        const result = await (embeddingModel as any).embedContent(text);
+        const result = await (getEmbeddingModel() as any).embedContent(text);
 
         if (!result.embedding || !result.embedding.values) {
             throw new Error('No embedding generated');
@@ -39,7 +56,7 @@ async function getEmbeddings(text: string): Promise<number[]> {
 
 async function generateContent(prompt: string): Promise<string> {
     try {
-        const resp = await generativeModel.generateContent(prompt);
+        const resp = await getGenerativeModel().generateContent(prompt);
         const aggregatedResponse = await resp.response;
 
         if (!aggregatedResponse.candidates || aggregatedResponse.candidates.length === 0) {

@@ -70,17 +70,17 @@ export async function createDoubt(doubtData: Partial<Doubt>): Promise<string> {
             courseId: doubtData.courseId || 'general',
             askedBy: doubtData.askedBy!,
             createdAt: serverTimestamp(),
-            status: 'AI',
-            resolved: false,
+            status: doubtData.status || 'OPEN',  // Default to OPEN for forum visibility
+            resolved: doubtData.resolved || false,
             aiAnswer: doubtData.aiAnswer || '',
-            replies: [],
-            votes: 0,
-            views: 0,
+            replies: doubtData.replies || [],
+            votes: doubtData.votes || 0,
+            views: doubtData.views || 0,
             tags: doubtData.tags || [],
-            history: [{
-                status: 'AI',
-                timestamp: new Date(), // Use regular Date in arrays
-                note: 'AI Generated Answer'
+            history: doubtData.history || [{
+                status: doubtData.status || 'OPEN',
+                timestamp: new Date(),
+                note: 'Question posted to forum'
             }]
         };
 

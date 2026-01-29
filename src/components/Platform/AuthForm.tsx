@@ -5,21 +5,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import GlassCard from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { User, Mail, GraduationCap, Building2, ArrowRight, Loader2, Shield } from 'lucide-react';
+import { Mail, GraduationCap, ArrowRight, Loader2, Shield } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
-import GoogleSignInButton from '@/components/GoogleSignInButton';
-
-const departments = ['Computer Science', 'Data Science', 'AI & ML', 'Robotics', 'Cyber Security'];
-const years = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
 
 type LoginType = 'student' | 'professor';
 
 export default function AuthForm() {
     const [loginType, setLoginType] = useState<LoginType>('student');
-    const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const router = useRouter();
@@ -28,37 +23,23 @@ export default function AuthForm() {
     // Form States
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [fullName, setFullName] = useState('');
-    const [department, setDepartment] = useState('');
-    const [year, setYear] = useState('');
 
     const handleStudentSubmit = async () => {
         setError(null);
         setLoading(true);
 
         try {
-            if (isLogin) {
-                // Student Login
-                await signInWithEmailAndPassword(auth, email, password);
-                router.push('/dashboard');
-            } else {
-                // Student Signup
-                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                await updateProfile(userCredential.user, {
-                    displayName: fullName
-                });
-                router.push('/dashboard');
-            }
+            // Student Login (No signup - admin creates accounts)
+            await signInWithEmailAndPassword(auth, email, password);
+            router.push('/dashboard');
         } catch (err: any) {
             console.error(err);
-            if (err.code === 'auth/email-already-in-use') {
-                setError('This email is already registered. Please login instead.');
-            } else if (err.code === 'auth/invalid-email') {
+            if (err.code === 'auth/invalid-email') {
                 setError('Invalid email address.');
-            } else if (err.code === 'auth/weak-password') {
-                setError('Password should be at least 6 characters.');
             } else if (err.code === 'auth/invalid-credential') {
                 setError('Invalid email or password.');
+            } else if (err.code === 'auth/user-not-found') {
+                setError('No account found. Contact your administrator.');
             } else {
                 setError(err.message || 'Authentication failed');
             }
@@ -75,12 +56,17 @@ export default function AuthForm() {
             const result = await professorLogin(email, password);
 
             if (result.success) {
-                router.push('/dashboard/professor');
+                // Check if the login was an admin login
+                if (result.isAdmin) {
+                    router.push('/dashboard/admin');
+                } else {
+                    router.push('/dashboard/professor');
+                }
             } else {
-                setError(result.error || 'Invalid professor credentials');
+                setError(result.error || 'Invalid credentials');
             }
         } catch (err: any) {
-            setError('Professor login failed');
+            setError('Login failed');
         } finally {
             setLoading(false);
         }
@@ -98,7 +84,7 @@ export default function AuthForm() {
         <div className="w-full max-w-md perspective-1000">
             <AnimatePresence mode="wait">
                 <motion.div
-                    key={`${loginType}-${isLogin}`}
+                    key={loginType}
                     initial={{ rotateY: 90, opacity: 0 }}
                     animate={{ rotateY: 0, opacity: 1 }}
                     exit={{ rotateY: -90, opacity: 0 }}
@@ -112,7 +98,6 @@ export default function AuthForm() {
                                     onClick={() => {
                                         setLoginType('student');
                                         setError(null);
-                                        setIsLogin(true);
                                     }}
                                     className={`px-4 py-2 rounded-lg font-semibold transition-all ${loginType === 'student'
                                         ? 'bg-white text-blue-600 shadow-sm'
@@ -128,7 +113,6 @@ export default function AuthForm() {
                                     onClick={() => {
                                         setLoginType('professor');
                                         setError(null);
-                                        setIsLogin(true);
                                     }}
                                     className={`px-4 py-2 rounded-lg font-semibold transition-all ${loginType === 'professor'
                                         ? 'bg-white text-purple-600 shadow-sm'
@@ -147,13 +131,13 @@ export default function AuthForm() {
                                 <h2 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">
                                     {loginType === 'professor'
                                         ? 'Professor Portal'
-                                        : (isLogin ? 'Welcome Back' : 'Join the Campus')
+                                        : 'Welcome Back'
                                     }
                                 </h2>
                                 <p className="text-slate-500 mt-2 text-sm">
                                     {loginType === 'professor'
                                         ? 'Restricted access for faculty'
-                                        : (isLogin ? 'Access your AI learning hub' : 'Begin your futuristic journey')
+                                        : 'Access your AI learning hub'
                                     }
                                 </p>
                             </div>
@@ -166,51 +150,11 @@ export default function AuthForm() {
 
                             {/* Form */}
                             <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
-                                {/* Student Signup Fields */}
-                                {loginType === 'student' && !isLogin && (
-                                    <div className="space-y-4">
-                                        <div className="relative">
-                                            <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
-                                            <Input
-                                                placeholder="Full Name"
-                                                value={fullName}
-                                                onChange={(e) => setFullName(e.target.value)}
-                                                className="pl-10 bg-white/50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-500"
-                                                required
-                                            />
-                                        </div>
-                                        <div className="relative">
-                                            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
-                                            <select
-                                                value={department}
-                                                onChange={(e) => setDepartment(e.target.value)}
-                                                className="pl-10 w-full bg-white/50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 outline-none focus:border-blue-500 transition-colors appearance-none"
-                                                required
-                                            >
-                                                <option value="">Select Department</option>
-                                                {departments.map(d => <option key={d} value={d} className="bg-white text-slate-900">{d}</option>)}
-                                            </select>
-                                        </div>
-                                        <div className="relative">
-                                            <GraduationCap className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
-                                            <select
-                                                value={year}
-                                                onChange={(e) => setYear(e.target.value)}
-                                                className="pl-10 w-full bg-white/50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 outline-none focus:border-blue-500 transition-colors appearance-none"
-                                                required
-                                            >
-                                                <option value="">Academic Year</option>
-                                                {years.map(y => <option key={y} value={y} className="bg-white text-slate-900">{y}</option>)}
-                                            </select>
-                                        </div>
-                                    </div>
-                                )}
-
                                 {/* Email Field */}
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
                                     <Input
-                                        placeholder={loginType === 'professor' ? 'Professor Email' : 'College Email'}
+                                        placeholder={loginType === 'professor' ? 'Professor Email' : 'Student Email'}
                                         type="email"
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
@@ -239,7 +183,7 @@ export default function AuthForm() {
                                         <>
                                             {loginType === 'professor'
                                                 ? 'Access Dashboard'
-                                                : (isLogin ? 'Enter Portal' : 'Register ID')
+                                                : 'Enter Portal'
                                             }
                                             <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
                                         </>
@@ -247,42 +191,11 @@ export default function AuthForm() {
                                 </Button>
                             </form>
 
-                            {/* Toggle Login/Signup (Student Only) */}
+                            {/* Note for Students (Login Only) */}
                             {loginType === 'student' && (
-                                <div className="space-y-3">
-                                    <div className="relative flex items-center gap-3">
-                                        <div className="flex-1 h-px bg-slate-200" />
-                                        <span className="text-xs text-slate-400 font-medium">OR</span>
-                                        <div className="flex-1 h-px bg-slate-200" />
-                                    </div>
-
-                                    <GoogleSignInButton
-                                        onError={(err) => setError(err)}
-                                        disabled={loading}
-                                    />
-
-                                    <div className="text-center text-sm text-slate-500">
-                                        {isLogin ? "New student? " : "Already enrolled? "}
-                                        <button
-                                            onClick={() => { setIsLogin(!isLogin); setError(null); }}
-                                            className="text-blue-600 hover:text-blue-500 font-medium underline-offset-4 hover:underline"
-                                        >
-                                            {isLogin ? 'Apply Now' : 'Login'}
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Toggle Login/Signup (Student Only) */}
-                            {loginType === 'student' && !isLogin && (
-                                <div className="text-center text-sm text-slate-500">
-                                    {isLogin ? "New student? " : "Already enrolled? "}
-                                    <button
-                                        onClick={() => { setIsLogin(!isLogin); setError(null); }}
-                                        className="text-blue-600 hover:text-blue-500 font-medium underline-offset-4 hover:underline"
-                                    >
-                                        {isLogin ? 'Apply Now' : 'Login'}
-                                    </button>
+                                <div className="text-center text-xs text-slate-400 bg-blue-50 p-2 rounded-lg border border-blue-100">
+                                    <GraduationCap className="w-3 h-3 inline mr-1" />
+                                    Use credentials provided by your administrator
                                 </div>
                             )}
 

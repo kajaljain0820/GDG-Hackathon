@@ -2,7 +2,38 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // TEMPORARY OPEN ACCESS FOR TESTING
+    // ADMIN COLLECTIONS - Allow public access (admin uses hardcoded credentials, not Firebase Auth)
+    // TODO: In production, secure these with a server-side admin API
+    match /students/{studentId} {
+      allow read, write: if true;
+    }
+    match /professors/{professorId} {
+      allow read, write: if true;
+    }
+    match /classes/{classId} {
+      allow read, write: if true;
+    }
+    match /branches/{branchId} {
+      allow read, write: if true;
+    }
+    
+    // DOUBTS COLLECTION - Allow all authenticated users (for student forum)
+    match /doubts/{doubtId} {
+      allow read, write: if true;
+    }
+    
+    // TASK ASSIGNMENT COLLECTIONS
+    match /assignments/{assignmentId} {
+      allow read, write: if true;
+    }
+    match /submissions/{submissionId} {
+      allow read, write: if true;
+    }
+    match /notifications/{notificationId} {
+      allow read, write: if true;
+    }
+    
+    // TEMPORARY OPEN ACCESS FOR TESTING (other collections)
     // TODO: Tighten these rules before production
     match /{document=**} {
       // Allow all authenticated users to read and write

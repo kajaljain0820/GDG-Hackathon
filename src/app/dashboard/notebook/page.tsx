@@ -1,571 +1,608 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import GlassCard from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Search, Send, Library, X, Mic, MicOff, Sparkles, Bot, User, Paperclip, FileText, Trash2, Database, Users, ArrowRight } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import api from '@/lib/api';
-import { useAuth } from '@/context/AuthContext';
-import { getAuth } from 'firebase/auth';
-import { firestoreService } from '@/lib/firestoreService';
-import { peersService } from '@/lib/peersService';
-import studyContextService from '@/lib/studyContextService';
-import studyHistoryService from '@/lib/studyHistoryService';
+import {
+    BookOpen,
+    Upload,
+    FileText,
+    X,
+    Send,
+    Bot,
+    User,
+    Loader2,
+    AlertCircle,
+    CheckCircle,
+    Sparkles,
+    MessageSquare,
+    Paperclip
+} from 'lucide-react';
 
-interface Message {
-    role: 'user' | 'model';
+interface ChatMessage {
+    id: string;
+    role: 'user' | 'assistant';
     content: string;
-    timestamp?: string;
+    timestamp: Date;
 }
 
-interface UploadedDocument {
-    name: string;
-    size: number;
-    uploadedAt: string;
-    chatId: string;
-}
-
-export default function NotebookPage() {
-    const { token, user } = useAuth();
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [input, setInput] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [uploading, setUploading] = useState(false);
-    const [currentChatId, setCurrentChatId] = useState<string | null>(null);
-    const [uploadedDocs, setUploadedDocs] = useState<UploadedDocument[]>([]);
-    const [showLibrary, setShowLibrary] = useState(false);
-    const [isListening, setIsListening] = useState(false);
-    const [partnerNotification, setPartnerNotification] = useState<{ show: boolean, count: number, partners: any[] } | null>(null);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+export default function AINotebookPage() {
+    // File upload state
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const [uploadSuccess, setUploadSuccess] = useState(false);
+    const [uploadError, setUploadError] = useState('');
+    const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const recognitionRef = useRef<any>(null);
-    const auth = getAuth();
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    };
+    // Chat state
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [inputMessage, setInputMessage] = useState('');
+    const [isSending, setIsSending] = useState(false);
+    const [chatError, setChatError] = useState('');
+    const chatContainerRef = useRef<HTMLDivElement>(null);
 
+    // Webhook URLs
+    const FILE_UPLOAD_WEBHOOK = 'https://rohan2409.app.n8n.cloud/webhook/file-upload';
+    const CHAT_WEBHOOK = 'https://rohan2409.app.n8n.cloud/webhook/chat';
+
+    // Auto-scroll to bottom when new messages arrive
     useEffect(() => {
-        scrollToBottom();
-    }, [messages]);
-
-    // Initialize Speech Recognition
-    useEffect(() => {
-        if (typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-            const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-            recognitionRef.current = new SpeechRecognition();
-            recognitionRef.current.continuous = false;
-            recognitionRef.current.interimResults = false;
-            recognitionRef.current.lang = 'en-US';
-
-            recognitionRef.current.onresult = (event: any) => {
-                const transcript = event.results[0][0].transcript;
-                setInput(prev => prev + (prev ? ' ' : '') + transcript);
-                setIsListening(false);
-            };
-
-            recognitionRef.current.onerror = () => {
-                setIsListening(false);
-            };
-
-            recognitionRef.current.onend = () => {
-                setIsListening(false);
-            };
+        if (chatContainerRef.current) {
+            // Use setTimeout to ensure DOM has updated
+            setTimeout(() => {
+                if (chatContainerRef.current) {
+                    chatContainerRef.current.scrollTo({
+                        top: chatContainerRef.current.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                }
+            }, 100);
         }
-    }, []);
+    }, [messages, isSending]);
 
-    const toggleVoiceInput = () => {
-        if (!recognitionRef.current) {
-            alert('Voice input not supported in your browser');
+    // File handling functions
+    const handleFileSelect = (file: File) => {
+        const allowedTypes = ['application/pdf', 'text/plain'];
+        const allowedExtensions = ['.pdf', '.txt'];
+        const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+
+        if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExtension)) {
+            setUploadError('Please upload a PDF or TXT file');
             return;
         }
 
-        if (isListening) {
-            try {
-                recognitionRef.current.stop();
-            } catch (e) {
-                console.error('Stop error:', e);
-            }
-            setIsListening(false);
-        } else {
-            try {
-                recognitionRef.current.start();
-                setIsListening(true);
-            } catch (e) {
-                console.error('Start error:', e);
-                setIsListening(false);
-            }
+        if (file.size > 10 * 1024 * 1024) {
+            setUploadError('File size must be less than 10MB');
+            return;
+        }
+
+        setSelectedFile(file);
+        setUploadError('');
+        setUploadSuccess(false);
+    };
+
+    const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            handleFileSelect(file);
         }
     };
 
-    // Initial Greeting
-    useEffect(() => {
-        if (messages.length === 0) {
-            setMessages([{
-                role: 'model',
-                content: 'Hi 👋 I\'m SparkLink, your AI companion \n\n📚 Upload a PDF, PPT or DOCX to get started or ask me anything about your studies! 💡',
-                timestamp: new Date().toISOString()
-            }]);
+    const handleDragOver = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    }, []);
+
+    const handleDragLeave = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+    }, []);
+
+    const handleDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) {
+            handleFileSelect(file);
         }
     }, []);
 
-    // Load user's previously uploaded documents from Firestore
-    useEffect(() => {
-        const loadUserDocuments = async () => {
-            if (!user?.uid) return;
+    const removeFile = () => {
+        setSelectedFile(null);
+        setUploadSuccess(false);
+        setUploadError('');
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    };
 
-            try {
-                const docs = await firestoreService.getUserDocuments(user.uid);
+    const handleUpload = async () => {
+        if (!selectedFile) {
+            setUploadError('Please select a file first');
+            return;
+        }
 
-                if (docs.length > 0) {
-                    setUploadedDocs(docs.map(d => ({
-                        name: d.filename,
-                        size: d.fileSize,
-                        uploadedAt: d.uploadedAt?.toDate ? d.uploadedAt.toDate().toISOString() : new Date().toISOString(),
-                        chatId: d.chatId
-                    })));
-
-                    console.log('✅ Loaded', docs.length, 'documents from Firestore');
-                }
-            } catch (error) {
-                console.error('❌ Error loading documents:', error);
-            }
-        };
-
-        loadUserDocuments();
-    }, [user]);
-
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file || !token) return;
-
-        setUploading(true);
-        setMessages(prev => [...prev, {
-            role: 'user',
-            content: `📄 Uploading ${file.name}...`
-        }]);
+        setIsUploading(true);
+        setUploadError('');
+        setUploadSuccess(false);
 
         try {
             const formData = new FormData();
-            formData.append('file', file);
-            formData.append('courseId', 'default_course_id');
+            formData.append('file', selectedFile, selectedFile.name);
 
-            // Use fetch API to avoid Axios FormData transformation issues
-            const user = auth.currentUser;
-            const token = user ? await user.getIdToken() : null;
+            console.log('Uploading file to:', FILE_UPLOAD_WEBHOOK);
+            console.log('File name:', selectedFile.name);
+            console.log('File size:', selectedFile.size);
+            console.log('File type:', selectedFile.type);
 
-            const fetchResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://us-central1-echo-1928rn.cloudfunctions.net/api'}/upload`, {
+            const response = await fetch(FILE_UPLOAD_WEBHOOK, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                    // Don't set Content-Type - browser will set it with boundary
-                },
-                body: formData
+                body: formData,
+                mode: 'cors',
             });
 
-            if (!fetchResponse.ok) {
-                throw new Error(`Upload failed: ${fetchResponse.statusText}`);
+            console.log('Upload response status:', response.status);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Upload error response:', errorText);
+                throw new Error(`Upload failed: ${response.status} - ${errorText}`);
             }
 
-            const response = { data: await fetchResponse.json() };
+            const responseData = await response.text();
+            console.log('Upload success response:', responseData);
 
-            if (response.data.chatId) {
-                setCurrentChatId(response.data.chatId);
+            setUploadSuccess(true);
 
-                const docData = {
-                    name: file.name,
-                    size: file.size,
-                    uploadedAt: new Date().toISOString(),
-                    chatId: response.data.chatId
-                };
+            // Add a system message to chat
+            const systemMessage: ChatMessage = {
+                id: Date.now().toString(),
+                role: 'assistant',
+                content: `📄 File "${selectedFile.name}" has been uploaded successfully! You can now ask me questions about its content.`,
+                timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, systemMessage]);
 
-                setUploadedDocs(prev => [...prev, docData]);
+        } catch (err: any) {
+            console.error('Upload error details:', {
+                name: err.name,
+                message: err.message,
+                stack: err.stack
+            });
 
-                // IMPORTANT: Save document to Firestore (permanent storage)
-                await firestoreService.saveDocument({
-                    chatId: response.data.chatId,
-                    filename: file.name,
-                    fileType: file.type || file.name.split('.').pop() || 'unknown',
-                    fileSize: file.size,
-                    uploadedBy: {
-                        name: user?.displayName || user?.email?.split('@')[0] || 'Student',
-                        uid: user?.uid || 'anonymous'
-                    },
-                    extractedText: response.data.text || '',
-                    chatHistory: []
-                });
-
-                console.log('✅ Document saved to Firestore:', file.name);
-
-                // STUDY MATCH: Sync extracted topics to user profile and active study context
-                if (response.data.topics && response.data.topics.length > 0 && user?.uid) {
-                    // Update user's persistent topics (merged with existing)
-                    await peersService.updateUserTopics(user.uid, response.data.topics);
-
-                    // Update active study context (live, real-time)
-                    await studyContextService.updateStudyContext(
-                        user.uid,
-                        'CS101', // TODO: Get from user context
-                        response.data.topics,
-                        'file_upload',
-                        file.name
-                    );
-
-                    console.log('🧠 Synced study topics and active context:', response.data.topics);
-                }
+            // Provide more helpful error messages
+            let errorMessage = 'Failed to upload file. ';
+            if (err.message.includes('Failed to fetch') || err.name === 'TypeError') {
+                errorMessage += 'Could not connect to the server. This might be a CORS issue or the webhook URL may be incorrect. Please check if the n8n workflow is active.';
+            } else {
+                errorMessage += err.message || 'Please try again.';
             }
 
-            setMessages(prev => [...prev, {
-                role: 'model',
-                content: `✅ Successfully processed "${file.name}"\n\nExtracted ${response.data.textLength} characters. Saved permanently to Firebase! You can now ask me questions about this document!`
-            }]);
-
-        } catch (error: any) {
-            console.error('❌ Upload error:', error);
-            setMessages(prev => [...prev, {
-                role: 'model',
-                content: `❌ Failed to upload ${file.name}: ${error.response?.data?.error || error.message}`
-            }]);
+            setUploadError(errorMessage);
         } finally {
-            setUploading(false);
-            if (fileInputRef.current) fileInputRef.current.value = '';
+            setIsUploading(false);
         }
     };
 
-    const handleSend = async () => {
-        if (!input.trim()) return;
+    // Helper function to extract text content from n8n response
+    const extractResponseContent = (data: any): string => {
+        // If it's a string, return it
+        if (typeof data === 'string') {
+            return data;
+        }
 
-        const userMessage = input.trim();
-        setInput('');
-        setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
-        setLoading(true);
+        // If it's null or undefined
+        if (data === null || data === undefined) {
+            return '';
+        }
+
+        // If it's an array, try to extract from first element
+        if (Array.isArray(data)) {
+            if (data.length === 0) return '';
+            return extractResponseContent(data[0]);
+        }
+
+        // If it's an object, try common response field names
+        if (typeof data === 'object') {
+            // Check for common response fields (in order of priority)
+            const responseFields = [
+                'response', 'message', 'output', 'text', 'content', 'answer',
+                'reply', 'result', 'data', 'body', 'choices'
+            ];
+
+            for (const field of responseFields) {
+                if (data[field] !== undefined && data[field] !== null) {
+                    const extracted = extractResponseContent(data[field]);
+                    if (extracted) return extracted;
+                }
+            }
+
+            // Special handling for OpenAI-style responses
+            if (data.choices && Array.isArray(data.choices) && data.choices[0]) {
+                const choice = data.choices[0];
+                if (choice.message?.content) return choice.message.content;
+                if (choice.text) return choice.text;
+            }
+
+            // If object has only one key, try to extract from that
+            const keys = Object.keys(data);
+            if (keys.length === 1) {
+                return extractResponseContent(data[keys[0]]);
+            }
+
+            // Last resort: stringify the object nicely
+            try {
+                return JSON.stringify(data, null, 2);
+            } catch {
+                return String(data);
+            }
+        }
+
+        // For numbers, booleans, etc.
+        return String(data);
+    };
+
+    // Chat functions
+    const handleSendMessage = async () => {
+        if (!inputMessage.trim() || isSending) return;
+
+        const userMessage: ChatMessage = {
+            id: Date.now().toString(),
+            role: 'user',
+            content: inputMessage.trim(),
+            timestamp: new Date(),
+        };
+
+        setMessages(prev => [...prev, userMessage]);
+        setInputMessage('');
+        setIsSending(true);
+        setChatError('');
 
         try {
-            const response = await api.post('/chat', {
-                message: userMessage,
-                chatId: currentChatId
+            const response = await fetch(CHAT_WEBHOOK, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message: userMessage.content,
+                    timestamp: userMessage.timestamp.toISOString(),
+                }),
             });
 
-            if (response.data.chatId && !currentChatId) {
-                setCurrentChatId(response.data.chatId);
+            if (!response.ok) {
+                throw new Error(`Chat failed: ${response.status}`);
             }
 
-            setMessages(prev => [...prev, {
-                role: 'model',
-                content: response.data.response
-            }]);
+            const responseText = await response.text();
+            console.log('Raw n8n response:', responseText);
 
-            // 🧠 STUDY PARTNER MATCHING: Extract topics and update active study context
-            if (user?.uid && userMessage.length > 10) {
-                try {
-                    const topicResponse = await api.post('/notebook/extract-topics', {
-                        question: userMessage,
-                        uid: user.uid,
-                        courseId: 'CS101' // TODO: Get from user context
-                    });
+            let assistantContent = '';
 
-                    if (topicResponse.data.topics && topicResponse.data.topics.length > 0) {
-                        // Update active study context in Firestore
-                        await studyContextService.updateStudyContext(
-                            user.uid,
-                            'CS101', // TODO: Get from user context
-                            topicResponse.data.topics,
-                            'question',
-                            userMessage
-                        );
-                        console.log('✅ Updated study context with topics:', topicResponse.data.topics);
-
-                        // 📚 RECORD IN STUDY HISTORY
-                        await studyHistoryService.recordTopicStudied(
-                            user.uid,
-                            'CS101', // TODO: Get from user context
-                            topicResponse.data.topics,
-                            'question'
-                        );
-
-                        // 🔔 CHECK FOR STUDY PARTNERS AND NOTIFY
-                        try {
-                            const matches = await studyContextService.getRecommendedStudyPartners(
-                                user.uid,
-                                'CS101',
-                                60 // 60-minute window
-                            );
-
-                            if (matches.length > 0) {
-                                console.log('🎉 Found', matches.length, 'study partner(s) for your topics!');
-
-                                // Show in-app notification
-                                setPartnerNotification({
-                                    show: true,
-                                    count: matches.length,
-                                    partners: matches
-                                });
-
-                                // Auto-hide after 10 seconds
-                                setTimeout(() => {
-                                    setPartnerNotification(null);
-                                }, 10000);
-
-                                // Also show desktop notification
-                                const { default: notificationService } = await import('@/lib/notificationService');
-
-                                if (notificationService.isSupported() &&
-                                    notificationService.getPermission().granted) {
-
-                                    console.log('🔔 Showing study partner notification...');
-
-                                    if (matches.length === 1) {
-                                        notificationService.showPartnerNotification(matches[0]);
-                                    } else {
-                                        notificationService.showMultipleNotification(matches.length, matches);
-                                    }
-                                } else {
-                                    console.log('ℹ️ Notifications not enabled. Found partners:',
-                                        matches.map(m => m.displayName).join(', '));
-                                }
-                            } else {
-                                console.log('ℹ️ No study partners found studying these topics right now');
-                            }
-                        } catch (matchError) {
-                            console.warn('⚠️ Partner matching failed (non-blocking):', matchError);
-                        }
-                    }
-                } catch (topicError) {
-                    // Non-blocking error - don't interrupt chat flow
-                    console.warn('⚠️ Topic extraction failed (non-blocking):', topicError);
-                }
+            try {
+                const data = JSON.parse(responseText);
+                console.log('Parsed n8n data:', data);
+                assistantContent = extractResponseContent(data);
+            } catch (parseError) {
+                console.log('Response is not JSON, using as plain text');
+                assistantContent = responseText;
             }
-        } catch (error: any) {
-            setMessages(prev => [...prev, {
-                role: 'model',
-                content: `Error: ${error.response?.data?.error || error.message || 'Failed to get AI response'}`
-            }]);
+
+            // Clean up the content if needed
+            assistantContent = assistantContent.trim();
+
+            // If still empty, show a fallback message
+            if (!assistantContent) {
+                assistantContent = 'I received a response but could not extract the content. Please check the n8n workflow output.';
+            }
+
+            const assistantMessage: ChatMessage = {
+                id: (Date.now() + 1).toString(),
+                role: 'assistant',
+                content: assistantContent,
+                timestamp: new Date(),
+            };
+
+            setMessages(prev => [...prev, assistantMessage]);
+
+        } catch (err: any) {
+            console.error('Chat error:', err);
+            setChatError(err.message || 'Failed to send message. Please try again.');
+
+            // Add error message to chat
+            const errorMessage: ChatMessage = {
+                id: (Date.now() + 1).toString(),
+                role: 'assistant',
+                content: '❌ Sorry, I encountered an error processing your message. Please try again.',
+                timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, errorMessage]);
         } finally {
-            setLoading(false);
+            setIsSending(false);
         }
     };
 
-    const removeDocument = (chatId: string) => {
-        setUploadedDocs(prev => prev.filter(doc => doc.chatId !== chatId));
-        if (currentChatId === chatId) {
-            setCurrentChatId(null);
+    const handleKeyPress = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSendMessage();
         }
+    };
+
+    const formatFileSize = (bytes: number) => {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    };
+
+    const formatTime = (date: Date) => {
+        return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     };
 
     return (
-        <div className="h-[calc(100vh-6rem)] flex flex-col gap-6">
+        <div className="space-y-8 max-w-7xl mx-auto">
             {/* Header */}
-            <header className="flex-shrink-0 flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Neural Notebook</h1>
-                    <p className="text-slate-500 text-sm mt-1">Your AI-powered research assistant and knowledge base</p>
-                </div>
-                <div className="flex gap-3">
-                    <Button
-                        variant="outline"
-                        className="gap-2 bg-white relative"
-                        onClick={() => setShowLibrary(!showLibrary)}
-                    >
-                        <Library className="w-4 h-4" /> Library
-                        {uploadedDocs.length > 0 && (
-                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
-                                {uploadedDocs.length}
-                            </span>
-                        )}
-                    </Button>
-                    <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => {
-                        setMessages([]);
-                        setCurrentChatId(null);
-                    }}>
-                        <Sparkles className="w-4 h-4" /> New Chat
-                    </Button>
+            <header>
+                <div className="flex items-center gap-3 mb-2">
+                    <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-violet-500/25">
+                        <BookOpen className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">AI Notebook</h1>
+                        <p className="text-slate-500 text-sm">Upload documents and chat with AI about their content</p>
+                    </div>
                 </div>
             </header>
 
-            {/* In-App Study Partner Notification */}
-            <AnimatePresence>
-                {partnerNotification?.show && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        className="fixed top-20 right-8 z-50 max-w-md"
-                    >
-                        <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-2xl shadow-2xl p-6 border border-green-400">
-                            <div className="flex items-start gap-4">
-                                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
-                                    <Users className="w-6 h-6" />
-                                </div>
-                                <div className="flex-1">
-                                    <h3 className="text-lg font-bold mb-1">
-                                        🎉 {partnerNotification.count === 1 ? 'Study Partner Found!' : `${partnerNotification.count} Study Partners Found!`}
-                                    </h3>
-                                    <p className="text-sm text-white/90 mb-3">
-                                        {partnerNotification.count === 1
-                                            ? `${partnerNotification.partners[0].displayName} is studying similar topics`
-                                            : `${partnerNotification.count} students studying similar topics`
-                                        }
-                                    </p>
-                                    <a
-                                        href="/dashboard/connect"
-                                        className="inline-flex items-center gap-2 bg-white text-green-600 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-green-50 transition-colors"
-                                    >
-                                        Connect Now <ArrowRight className="w-4 h-4" />
-                                    </a>
-                                </div>
-                                <button
-                                    onClick={() => setPartnerNotification(null)}
-                                    className="text-white/80 hover:text-white transition-colors"
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* File Upload Section */}
+                <div className="lg:col-span-1">
+                    <GlassCard className="p-6 bg-white/60 border-white/60 h-full">
+                        <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <Paperclip className="w-5 h-5 text-violet-500" />
+                            Upload Document
+                        </h2>
+
+                        <div className="space-y-4">
+                            {/* Hidden file input */}
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".pdf,.txt,application/pdf,text/plain"
+                                onChange={handleFileInputChange}
+                                className="hidden"
+                            />
+
+                            {/* File Upload Box */}
+                            {!selectedFile ? (
+                                <div
+                                    className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all group ${isDragging
+                                        ? 'border-violet-500 bg-violet-100'
+                                        : 'border-violet-200 bg-violet-50/30 hover:bg-violet-50 hover:border-violet-300'
+                                        }`}
+                                    onClick={() => fileInputRef.current?.click()}
+                                    onDragOver={handleDragOver}
+                                    onDragLeave={handleDragLeave}
+                                    onDrop={handleDrop}
                                 >
-                                    <X className="w-5 h-5" />
-                                </button>
+                                    <Upload className={`w-10 h-10 mx-auto mb-3 transition-colors ${isDragging ? 'text-violet-600' : 'text-violet-400 group-hover:text-violet-600'
+                                        }`} />
+                                    <p className="font-medium text-violet-900">Upload PDF or TXT</p>
+                                    <p className="text-xs text-violet-600 mt-1">Drag & drop or click to browse</p>
+                                    <p className="text-xs text-violet-400 mt-2">Max size: 10MB</p>
+                                </div>
+                            ) : (
+                                <div className={`border-2 rounded-xl p-4 flex items-center gap-4 transition-all ${uploadSuccess
+                                    ? 'border-emerald-400 bg-emerald-50'
+                                    : 'border-violet-400 bg-violet-50'
+                                    }`}>
+                                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${uploadSuccess ? 'bg-emerald-100' : 'bg-violet-100'
+                                        }`}>
+                                        {uploadSuccess ? (
+                                            <CheckCircle className="w-6 h-6 text-emerald-600" />
+                                        ) : (
+                                            <FileText className="w-6 h-6 text-violet-600" />
+                                        )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className={`font-medium truncate ${uploadSuccess ? 'text-emerald-900' : 'text-violet-900'
+                                            }`}>{selectedFile.name}</p>
+                                        <p className={`text-xs ${uploadSuccess ? 'text-emerald-600' : 'text-violet-600'
+                                            }`}>
+                                            {formatFileSize(selectedFile.size)}
+                                            {uploadSuccess && ' • Uploaded'}
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={removeFile}
+                                        className={`p-2 rounded-lg transition-colors ${uploadSuccess
+                                            ? 'hover:bg-emerald-100'
+                                            : 'hover:bg-violet-100'
+                                            }`}
+                                    >
+                                        <X className={`w-5 h-5 ${uploadSuccess ? 'text-emerald-600' : 'text-violet-600'
+                                            }`} />
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Error Message */}
+                            {uploadError && (
+                                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                                    {uploadError}
+                                </div>
+                            )}
+
+                            {/* Upload Button */}
+                            <Button
+                                onClick={handleUpload}
+                                disabled={isUploading || !selectedFile || uploadSuccess}
+                                className="w-full py-3 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white rounded-xl shadow-lg gap-2 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isUploading ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Uploading...
+                                    </>
+                                ) : uploadSuccess ? (
+                                    <>
+                                        <CheckCircle className="w-4 h-4" />
+                                        Uploaded Successfully
+                                    </>
+                                ) : (
+                                    <>
+                                        <Upload className="w-4 h-4" />
+                                        Upload to AI
+                                    </>
+                                )}
+                            </Button>
+
+                            {/* Instructions */}
+                            <div className="mt-6 p-4 bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl border border-violet-100">
+                                <h3 className="text-sm font-semibold text-violet-800 mb-2 flex items-center gap-2">
+                                    <Sparkles className="w-4 h-4" />
+                                    How it works
+                                </h3>
+                                <ol className="text-xs text-violet-600 space-y-2">
+                                    <li className="flex items-start gap-2">
+                                        <span className="w-5 h-5 bg-violet-200 rounded-full flex items-center justify-center text-violet-700 font-bold flex-shrink-0">1</span>
+                                        <span>Upload your PDF or text file</span>
+                                    </li>
+                                    <li className="flex items-start gap-2">
+                                        <span className="w-5 h-5 bg-violet-200 rounded-full flex items-center justify-center text-violet-700 font-bold flex-shrink-0">2</span>
+                                        <span>AI processes your document</span>
+                                    </li>
+                                    <li className="flex items-start gap-2">
+                                        <span className="w-5 h-5 bg-violet-200 rounded-full flex items-center justify-center text-violet-700 font-bold flex-shrink-0">3</span>
+                                        <span>Ask questions in the chat!</span>
+                                    </li>
+                                </ol>
                             </div>
                         </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                    </GlassCard>
+                </div>
 
-            {/* Library Sidebar Modal */}
-            <AnimatePresence>
-                {showLibrary && (
-                    <motion.div
-                        initial={{ opacity: 0, x: 300 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 300 }}
-                        className="fixed right-8 top-24 w-80 h-[calc(100vh-12rem)] z-50"
-                    >
-                        <GlassCard className="h-full bg-white/95 border-slate-200 shadow-2xl p-4 flex flex-col">
-                            <div className="flex justify-between items-center mb-4">
-                                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                                    <FileText className="w-5 h-5" /> Uploaded Documents
-                                </h3>
-                                <button onClick={() => setShowLibrary(false)} className="p-1 hover:bg-slate-100 rounded">
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-                            <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar">
-                                {uploadedDocs.length === 0 ? (
-                                    <div className="text-center text-slate-400 text-sm mt-10">
-                                        No documents uploaded yet.<br />Upload PDFs or PPTs to get started!
-                                    </div>
-                                ) : (
-                                    uploadedDocs.map((doc, i) => (
-                                        <div key={i} className="p-3 bg-white rounded-lg border border-slate-200 hover:shadow-md transition-shadow">
-                                            <div className="flex justify-between items-start">
-                                                <div className="flex-1">
-                                                    <p className="text-sm font-medium text-slate-800 truncate">{doc.name}</p>
-                                                    <p className="text-xs text-slate-400 mt-1">
-                                                        {(doc.size / 1024).toFixed(1)} KB • {new Date(doc.uploadedAt).toLocaleDateString()}
-                                                    </p>
-                                                </div>
-                                                <button
-                                                    onClick={() => removeDocument(doc.chatId)}
-                                                    className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        </GlassCard>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                {/* Chat Section */}
+                <div className="lg:col-span-2">
+                    <div className="backdrop-blur-xl rounded-[2rem] relative bg-white/60 border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-6 h-[calc(100vh-16rem)] flex flex-col">
+                        <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 flex-shrink-0">
+                            <MessageSquare className="w-5 h-5 text-violet-500" />
+                            Chat with AI
+                            {uploadSuccess && (
+                                <span className="text-xs font-normal bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full ml-2">
+                                    Document loaded
+                                </span>
+                            )}
+                        </h2>
 
-            {/* Main Chat Container - Properly Structured */}
-            <div className="flex-1 overflow-hidden">
-                <GlassCard className="h-full flex flex-col border-white/60 bg-white/50 backdrop-blur-xl shadow-xl" intensity="medium">
-
-                    {/* Messages Area - Scrollable */}
-                    <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-                        {messages.map((msg, i) => (
-                            <motion.div
-                                key={i}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
-                            >
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-purple-100 text-purple-600'}`}>
-                                    {msg.role === 'user' ? <User className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
-                                </div>
-                                <div className={`max-w-[80%] p-4 rounded-2xl ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-slate-100 shadow-sm rounded-tl-none text-slate-700'}`}>
-                                    <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</p>
-                                </div>
-                            </motion.div>
-                        ))}
-                        {(loading || uploading) && (
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-4">
-                                <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
-                                    <Bot className="w-5 h-5" />
-                                </div>
-                                <div className="bg-white border border-slate-100 shadow-sm rounded-2xl rounded-tl-none p-4 flex items-center gap-2">
-                                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" />
-                                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                                    {uploading && <span className="text-xs text-slate-400 ml-2">Processing...</span>}
-                                </div>
-                            </motion.div>
-                        )}
-                        <div ref={messagesEndRef} />
-                    </div>
-
-                    {/* Input Area - Fixed at Bottom */}
-                    <div className="border-t border-slate-200/50 bg-white/40 backdrop-blur-md p-4 flex-shrink-0">
-                        <form
-                            onSubmit={(e) => {
-                                e.preventDefault();
-                                handleSend();
-                            }}
-                            className="relative max-w-4xl mx-auto"
+                        {/* Chat Messages - Scrollable Container */}
+                        <div
+                            ref={chatContainerRef}
+                            className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2"
+                            style={{ overscrollBehavior: 'contain' }}
                         >
-                            <Input
-                                value={input}
-                                onChange={(e) => setInput(e.target.value)}
-                                placeholder="Ask SparkLink anything or upload a file..."
-                                className="pr-28 h-14 bg-white/80 border-slate-200 focus:border-blue-500 transition-all text-base pl-12 text-slate-800 shadow-inner rounded-2xl"
-                                disabled={loading || uploading}
-                            />
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                className="hidden"
-                                accept=".pdf,.ppt,.pptx,.doc,.docx,.txt"
-                                onChange={handleFileUpload}
-                            />
+                            {messages.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                                    <div className="w-20 h-20 bg-gradient-to-br from-violet-100 to-purple-100 rounded-full flex items-center justify-center mb-4">
+                                        <Bot className="w-10 h-10 text-violet-400" />
+                                    </div>
+                                    <h3 className="text-lg font-semibold text-slate-700 mb-2">Start a Conversation</h3>
+                                    <p className="text-slate-500 text-sm max-w-md">
+                                        Upload a document first, then ask me anything about its content.
+                                        I'm here to help you understand and explore your documents!
+                                    </p>
+                                </div>
+                            ) : (
+                                messages.map((message) => (
+                                    <div
+                                        key={message.id}
+                                        className={`flex gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
+                                    >
+                                        {/* Avatar */}
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${message.role === 'user'
+                                            ? 'bg-gradient-to-br from-emerald-500 to-green-600'
+                                            : 'bg-gradient-to-br from-violet-500 to-purple-600'
+                                            }`}>
+                                            {message.role === 'user' ? (
+                                                <User className="w-5 h-5 text-white" />
+                                            ) : (
+                                                <Bot className="w-5 h-5 text-white" />
+                                            )}
+                                        </div>
 
-                            <button
-                                type="button"
-                                onClick={() => fileInputRef.current?.click()}
-                                className="absolute left-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:bg-slate-100 hover:text-blue-600 rounded-lg transition-colors"
-                                title="Upload PDF/PPT"
-                            >
-                                <Paperclip className="w-5 h-5" />
-                            </button>
+                                        {/* Message Bubble */}
+                                        <div className={`max-w-[75%] ${message.role === 'user' ? 'text-right' : ''}`}>
+                                            <div className={`px-4 py-3 rounded-2xl ${message.role === 'user'
+                                                ? 'bg-gradient-to-br from-emerald-500 to-green-600 text-white rounded-tr-sm'
+                                                : 'bg-white border border-slate-100 text-slate-700 rounded-tl-sm shadow-sm'
+                                                }`}>
+                                                <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                                                    {message.content}
+                                                </p>
+                                            </div>
+                                            <p className={`text-xs text-slate-400 mt-1 ${message.role === 'user' ? 'text-right' : ''
+                                                }`}>
+                                                {formatTime(message.timestamp)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
 
-                            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-                                <button
-                                    type="button"
-                                    onClick={toggleVoiceInput}
-                                    className={`p-2 rounded-lg transition-all ${isListening ? 'bg-red-100 text-red-600' : 'text-slate-400 hover:bg-slate-100'}`}
-                                    title="Voice Input"
-                                >
-                                    {isListening ? <MicOff className="w-5 h-5 animate-pulse" /> : <Mic className="w-5 h-5" />}
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={loading || uploading || !input.trim()}
-                                    className="p-2 bg-blue-600 rounded-lg text-white hover:bg-blue-500 transition-all shadow-lg shadow-blue-600/20 active:scale-95 disabled:opacity-50 disabled:active:scale-100"
-                                >
-                                    <Send className="w-5 h-5" />
-                                </button>
+                            {/* Typing Indicator */}
+                            {isSending && (
+                                <div className="flex gap-3">
+                                    <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-violet-500 to-purple-600">
+                                        <Bot className="w-5 h-5 text-white" />
+                                    </div>
+                                    <div className="bg-white border border-slate-100 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+                                        <div className="flex gap-1">
+                                            <span className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                                            <span className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                                            <span className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Chat Error */}
+                        {chatError && (
+                            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm mb-4 flex-shrink-0">
+                                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                                {chatError}
                             </div>
-                        </form>
+                        )}
+
+                        {/* Input Area */}
+                        <div className="flex gap-3 items-end flex-shrink-0">
+                            <div className="flex-1 relative">
+                                <textarea
+                                    value={inputMessage}
+                                    onChange={(e) => setInputMessage(e.target.value)}
+                                    onKeyDown={handleKeyPress}
+                                    placeholder="Ask a question about your document..."
+                                    rows={1}
+                                    className="w-full px-4 py-3 pr-12 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none text-sm placeholder:text-slate-400"
+                                    style={{ minHeight: '48px', maxHeight: '120px' }}
+                                />
+                            </div>
+                            <Button
+                                onClick={handleSendMessage}
+                                disabled={isSending || !inputMessage.trim()}
+                                className="w-12 h-12 p-0 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                            >
+                                {isSending ? (
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                ) : (
+                                    <Send className="w-5 h-5" />
+                                )}
+                            </Button>
+                        </div>
                     </div>
-                </GlassCard>
+                </div>
             </div>
         </div>
     );

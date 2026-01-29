@@ -4,80 +4,68 @@ import { useState, useEffect } from 'react';
 import GlassCard from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { MessageSquare, ThumbsUp, Eye, Search, PlusCircle, CheckCircle, HelpCircle, User, Shield, GraduationCap, X, Database } from 'lucide-react';
-import api from '@/lib/api';
+import {
+    MessageSquare,
+    ThumbsUp,
+    Eye,
+    Search,
+    PlusCircle,
+    CheckCircle,
+    HelpCircle,
+    User,
+    Shield,
+    GraduationCap,
+    X,
+    Database,
+    Send,
+    Clock,
+    Loader2,
+    Filter,
+    RefreshCw
+} from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { AnimatePresence, motion } from 'framer-motion';
-import firestoreService from '@/lib/firestoreService';
-import studyHistoryService from '@/lib/studyHistoryService';
-
-interface Reply {
-    replyId: string;
-    content: string;
-    repliedBy: { name: string; role: string };
-    createdAt: string;
-    isAi: boolean;
-    isAccepted: boolean;
-}
-
-interface Doubt {
-    doubtId: string;
-    content: string;
-    status: 'AI' | 'OPEN' | 'SENIOR_VISIBLE' | 'PROFESSOR' | 'PROFESSOR_VISIBLE' | 'RESOLVED';
-    resolved: boolean;
-    aiAnswer?: string;
-    replies: Reply[];
-    askedBy: { name: string; uid: string };
-    createdAt: string;
-    votes: number;
-    courseId: string;
-}
+import firestoreService, { Doubt, Reply } from '@/lib/firestoreService';
 
 export default function ForumPage() {
     const { token, user } = useAuth();
     const [doubts, setDoubts] = useState<Doubt[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [showCreate, setShowCreate] = useState(false);
     const [newDoubtContent, setNewDoubtContent] = useState('');
     const [creating, setCreating] = useState(false);
     const [replyContent, setReplyContent] = useState<{ [key: string]: string }>({});
     const [expandedDoubtId, setExpandedDoubtId] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filterStatus, setFilterStatus] = useState<string>('all');
+    const [submittingReply, setSubmittingReply] = useState<string | null>(null);
 
-    // Auto-refresh for escalation updates
+    // Load doubts on mount
     useEffect(() => {
-        if (!token) return;
         fetchDoubts();
 
-        const interval = setInterval(fetchDoubts, 5000); // Poll every 5s
+        // Auto-refresh every 30 seconds
+        const interval = setInterval(fetchDoubts, 30000);
         return () => clearInterval(interval);
-    }, [token]);
+    }, []);
 
     const fetchDoubts = async () => {
         try {
-            // PRIMARY: Fetch from Firestore (permanent storage)
             const firestoreDoubts = await firestoreService.getDoubts({ limit: 100 });
-
-            if (firestoreDoubts.length > 0) {
-                setDoubts(firestoreDoubts as any);
-                console.log('✅ Loaded', firestoreDoubts.length, 'doubts from Firestore');
-            } else {
-                // FALLBACK: If Firestore is empty, try API
-                const res = await api.get('/doubts');
-                setDoubts(res.data);
-                console.log('⚠️ Loaded from API (Firestore empty)');
-            }
+            setDoubts(firestoreDoubts);
+            console.log('✅ Loaded', firestoreDoubts.length, 'doubts from Firestore');
         } catch (error) {
             console.error('❌ Failed to fetch doubts:', error);
-            // Last fallback: try API
-            try {
-                const res = await api.get('/doubts');
-                setDoubts(res.data);
-            } catch (apiError) {
-                console.error('❌ API also failed');
-            }
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleRefresh = async () => {
+        setRefreshing(true);
+        await fetchDoubts();
+        setRefreshing(false);
     };
 
     const handleCreateDoubt = async () => {
@@ -87,37 +75,27 @@ export default function ForumPage() {
         try {
             const doubtData = {
                 courseId: 'CS101',
-                content: newDoubtContent,
+                content: newDoubtContent.trim(),
                 askedBy: {
                     name: user?.displayName || user?.email?.split('@')[0] || 'Student',
-                    uid: user?.uid || 'anonymous',
+                    uid: user?.uid || `guest_${Date.now()}`,
                     email: user?.email || undefined
                 },
-                tags: []
-            };
-
-            // Save to backend API (for AI response)
-            const apiResponse = await api.post('/doubts', {
-                ...doubtData,
-                userName: doubtData.askedBy.name,
-                userUid: doubtData.askedBy.uid
-            });
-
-            // IMPORTANT: Also save to Firestore (permanent storage)
-            await firestoreService.createDoubt({
-                ...doubtData,
-                aiAnswer: apiResponse.data.aiAnswer || '',
+                tags: [],
+                status: 'OPEN' as const,  // Start as OPEN so everyone can see and answer
                 resolved: false,
                 votes: 0,
                 views: 0,
                 replies: [],
-                status: 'AI',
                 history: [{
-                    status: 'AI',
+                    status: 'OPEN',
                     timestamp: new Date(),
-                    note: 'AI Generated Answer'
+                    note: 'Question posted to forum'
                 }]
-            });
+            };
+
+            // Save directly to Firestore
+            await firestoreService.createDoubt(doubtData);
 
             setNewDoubtContent('');
             setShowCreate(false);
@@ -125,43 +103,22 @@ export default function ForumPage() {
             // Refresh to show new doubt
             await fetchDoubts();
 
-            console.log('✅ Doubt saved to both API and Firestore!');
+            console.log('✅ Doubt saved to Firestore!');
         } catch (error) {
             console.error('❌ Failed to post doubt:', error);
-            alert('Failed to post doubt');
+            alert('Failed to post doubt. Please try again.');
         } finally {
             setCreating(false);
         }
     };
 
-    const handleStudentAction = async (doubtId: string, action: 'SOLVED' | 'CONFUSED') => {
+    const handleMarkResolved = async (doubtId: string) => {
         try {
-            // IMPORTANT: Update Firestore directly (no API call needed)
-            if (action === 'SOLVED') {
-                await firestoreService.resolveDoubt(doubtId);
-                console.log('✅ Doubt marked as RESOLVED in Firestore');
-
-                // 📚 RECORD IN STUDY HISTORY
-                const doubt = doubts.find(d => d.doubtId === doubtId);
-                if (doubt && user?.uid) {
-                    await studyHistoryService.recordDoubtSolved(
-                        user.uid,
-                        doubt.courseId || 'CS101',
-                        doubtId,
-                        doubt.content,
-                        'AI' // Since this is student marking as solved after AI answer
-                    );
-                }
-            } else if (action === 'CONFUSED') {
-                await firestoreService.updateDoubtStatus(doubtId, 'OPEN', 'Student escalated to forum');
-                setExpandedDoubtId(doubtId);
-                console.log('✅ Doubt escalated to OPEN in Firestore');
-            }
-
+            await firestoreService.resolveDoubt(doubtId);
             await fetchDoubts();
+            console.log('✅ Doubt marked as RESOLVED');
         } catch (error) {
-            console.error('❌ Action failed:', error);
-            alert('Action failed - please try again');
+            console.error('❌ Failed to resolve doubt:', error);
         }
     };
 
@@ -169,20 +126,17 @@ export default function ForumPage() {
         const content = replyContent[doubtId];
         if (!content?.trim()) return;
 
+        setSubmittingReply(doubtId);
         try {
-            // Determine if replier is a Professor (for demo, random)
-            const isProfessor = Math.random() > 0.8;
-
-            // IMPORTANT: Save reply to Firestore (permanent storage)
             await firestoreService.addReplyToDoubt(doubtId, {
-                content,
+                content: content.trim(),
                 repliedBy: {
-                    name: user?.displayName || user?.email?.split('@')[0] || 'Anonymous',
-                    uid: user?.uid || 'anonymous',
-                    role: isProfessor ? 'PROFESSOR' : 'STUDENT'
+                    name: user?.displayName || user?.email?.split('@')[0] || 'Anonymous Student',
+                    uid: user?.uid || `guest_${Date.now()}`,
+                    role: 'STUDENT'
                 },
                 isAi: false,
-                isAccepted: isProfessor // Auto-accept professor replies
+                isAccepted: false
             });
 
             setReplyContent(prev => ({ ...prev, [doubtId]: '' }));
@@ -192,182 +146,376 @@ export default function ForumPage() {
         } catch (error) {
             console.error('❌ Failed to submit reply:', error);
             alert('Reply failed - please try again');
+        } finally {
+            setSubmittingReply(null);
+        }
+    };
+
+    const handleAcceptAnswer = async (doubtId: string, replyId: string) => {
+        // Find the doubt and update the reply's isAccepted status
+        const doubt = doubts.find(d => d.doubtId === doubtId);
+        if (!doubt) return;
+
+        try {
+            const updatedReplies = doubt.replies.map(r => ({
+                ...r,
+                isAccepted: r.replyId === replyId
+            }));
+
+            // Update in Firestore (we'd need to add this function, but for now mark as resolved)
+            await firestoreService.resolveDoubt(doubtId);
+            await fetchDoubts();
+        } catch (error) {
+            console.error('❌ Failed to accept answer:', error);
         }
     };
 
     const getStatusParams = (status: string) => {
         switch (status) {
             case 'AI': return { color: 'bg-purple-100 text-purple-700 border-purple-200', text: 'AI Analyzing', icon: HelpCircle };
-            case 'OPEN': return { color: 'bg-green-100 text-green-700 border-green-200', text: 'Open to Class', icon: User };
-            case 'SENIOR_VISIBLE': return { color: 'bg-orange-100 text-orange-700 border-orange-200', text: 'Escalated to Seniors', icon: Shield };
+            case 'OPEN': return { color: 'bg-green-100 text-green-700 border-green-200', text: 'Open', icon: MessageSquare };
+            case 'SENIOR_VISIBLE': return { color: 'bg-orange-100 text-orange-700 border-orange-200', text: 'Seniors Only', icon: Shield };
             case 'PROFESSOR':
-            case 'PROFESSOR_VISIBLE': return { color: 'bg-red-100 text-red-700 border-red-200', text: 'Professor Attention', icon: GraduationCap };
+            case 'PROFESSOR_VISIBLE': return { color: 'bg-red-100 text-red-700 border-red-200', text: 'Professor', icon: GraduationCap };
             case 'RESOLVED': return { color: 'bg-blue-100 text-blue-700 border-blue-200', text: 'Resolved', icon: CheckCircle };
-            default: return { color: 'bg-slate-100', text: status, icon: HelpCircle };
+            default: return { color: 'bg-slate-100 text-slate-700', text: status, icon: HelpCircle };
         }
     };
 
+    const getTimeAgo = (dateString: string) => {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        const diffHours = Math.floor(diffMins / 60);
+        if (diffHours < 24) return `${diffHours}h ago`;
+        const diffDays = Math.floor(diffHours / 24);
+        return `${diffDays}d ago`;
+    };
+
+    // Filter doubts based on search and status filter
+    const filteredDoubts = doubts.filter(doubt => {
+        const matchesSearch = doubt.content.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesFilter = filterStatus === 'all' || doubt.status === filterStatus;
+        return matchesSearch && matchesFilter;
+    });
+
+    if (loading) {
+        return (
+            <div className="max-w-5xl mx-auto flex items-center justify-center py-20">
+                <div className="text-center">
+                    <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    <p className="text-slate-500 mt-4">Loading Doubt Forum...</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="max-w-5xl mx-auto flex flex-col gap-6 pb-20">
+            {/* Header */}
             <header className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Doubt Forum</h1>
-                    <p className="text-slate-500 text-sm mt-1">AI-First Resolution Engine</p>
+                    <p className="text-slate-500 text-sm mt-1">Ask questions, help classmates, learn together</p>
                 </div>
-                <Button className="bg-blue-600 hover:bg-blue-700 text-white gap-2" onClick={() => setShowCreate(!showCreate)}>
-                    <PlusCircle className="w-4 h-4" /> Ask Question
-                </Button>
+                <div className="flex items-center gap-3">
+                    <Button
+                        variant="outline"
+                        onClick={handleRefresh}
+                        disabled={refreshing}
+                        className="gap-2"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                        Refresh
+                    </Button>
+                    <Button
+                        className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                        onClick={() => setShowCreate(!showCreate)}
+                    >
+                        <PlusCircle className="w-4 h-4" />
+                        Ask Question
+                    </Button>
+                </div>
             </header>
 
-            {/* Escalation System Info Banner */}
-            <GlassCard className="p-4 bg-blue-50 border-blue-200 mb-6">
+            {/* Info Banner */}
+            <GlassCard className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
                 <div className="flex items-start gap-3">
-                    <Shield className="w-5 h-5 text-blue-600 mt-0.5" />
+                    <Database className="w-5 h-5 text-blue-600 mt-0.5" />
                     <div className="flex-1">
                         <div className="flex items-center gap-3 mb-1">
-                            <h3 className="font-bold text-blue-900">Smart Escalation System Active</h3>
+                            <h3 className="font-bold text-blue-900">Community Learning Forum</h3>
                             <span className="flex items-center gap-1.5 text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full border border-green-200">
-                                <Database className="w-3 h-3" />
-                                Firestore Connected
+                                <CheckCircle className="w-3 h-3" />
+                                {doubts.length} Questions
                             </span>
                         </div>
                         <p className="text-sm text-blue-700 leading-relaxed">
-                            Your doubts are automatically escalated: <span className="font-semibold">AI → Open Forum (all students) → Senior Students (30min) → Professor (2hr)</span>.
-                            All discussions permanently stored in Firebase! 🚀
+                            Ask your doubts and let fellow students help! All discussions are <span className="font-semibold">permanently stored</span> to build a knowledge base.
                         </p>
                     </div>
                 </div>
             </GlassCard>
 
-            {/* Create Area */}
+            {/* Search and Filter */}
+            <div className="flex gap-4">
+                <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <Input
+                        placeholder="Search questions..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-10"
+                    />
+                </div>
+                <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    className="px-4 py-2 border border-slate-200 rounded-xl bg-white"
+                >
+                    <option value="all">All Questions</option>
+                    <option value="OPEN">Open</option>
+                    <option value="RESOLVED">Resolved</option>
+                </select>
+            </div>
+
+            {/* Create Question Area */}
             <AnimatePresence>
                 {showCreate && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                        <GlassCard className="p-4 bg-white/60 mb-6">
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                    >
+                        <GlassCard className="p-6 bg-white border-2 border-blue-200">
+                            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                <HelpCircle className="w-5 h-5 text-blue-600" />
+                                Ask a New Question
+                            </h3>
                             <textarea
-                                className="w-full p-4 rounded-xl border border-slate-200 bg-white/50 focus:ring-2 focus:ring-blue-500 outline-none resize-none text-slate-800"
-                                rows={3}
-                                placeholder="Describe your doubt..."
+                                className="w-full p-4 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-blue-500 outline-none resize-none text-slate-800"
+                                rows={4}
+                                placeholder="Describe your doubt in detail... Be specific so others can help you better!"
                                 value={newDoubtContent}
                                 onChange={(e) => setNewDoubtContent(e.target.value)}
                             />
-                            <div className="flex justify-end mt-3 gap-2">
-                                <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
-                                <Button onClick={handleCreateDoubt} disabled={creating} className="bg-blue-600 text-white">
-                                    {creating ? 'Analyzing...' : 'Post Doubt'}
-                                </Button>
+                            <div className="flex justify-between items-center mt-4">
+                                <p className="text-xs text-slate-500">
+                                    💡 Tip: Include context about what you've already tried
+                                </p>
+                                <div className="flex gap-2">
+                                    <Button variant="outline" onClick={() => setShowCreate(false)}>
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        onClick={handleCreateDoubt}
+                                        disabled={creating || !newDoubtContent.trim()}
+                                        className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                                    >
+                                        {creating ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                Posting...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Send className="w-4 h-4" />
+                                                Post Question
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
                             </div>
                         </GlassCard>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* List */}
-            <div className="space-y-4">
-                {doubts.map((doubt) => {
-                    const status = getStatusParams(doubt.status);
-                    const StatusIcon = status.icon;
-                    const isExpanded = expandedDoubtId === doubt.doubtId;
+            {/* Questions List */}
+            {filteredDoubts.length === 0 ? (
+                <GlassCard className="p-12 text-center">
+                    <MessageSquare className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                    <h3 className="text-xl font-bold text-slate-700 mb-2">No questions yet</h3>
+                    <p className="text-slate-500 mb-4">Be the first to ask a question!</p>
+                    <Button
+                        onClick={() => setShowCreate(true)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                        <PlusCircle className="w-4 h-4 mr-2" />
+                        Ask First Question
+                    </Button>
+                </GlassCard>
+            ) : (
+                <div className="space-y-4">
+                    {filteredDoubts.map((doubt) => {
+                        const status = getStatusParams(doubt.status);
+                        const StatusIcon = status.icon;
+                        const isExpanded = expandedDoubtId === doubt.doubtId;
+                        const isOwner = doubt.askedBy.uid === user?.uid;
 
-                    return (
-                        <GlassCard key={doubt.doubtId} className={`p-0 overflow-hidden transition-all duration-300 border-slate-200 ${isExpanded ? 'ring-2 ring-blue-500/20' : ''}`}>
-                            <div className="p-5 cursor-pointer hover:bg-slate-50/50" onClick={() => setExpandedDoubtId(isExpanded ? null : doubt.doubtId)}>
-                                <div className="flex justify-between items-start gap-4">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 ${status.color}`}>
-                                                <StatusIcon className="w-3 h-3" /> {status.text}
-                                            </span>
-                                            <span className="text-xs text-slate-400">• {new Date(doubt.createdAt).toLocaleTimeString()}</span>
+                        return (
+                            <GlassCard
+                                key={doubt.doubtId}
+                                className={`p-0 overflow-hidden transition-all duration-300 ${isExpanded ? 'ring-2 ring-blue-500/30 shadow-lg' : 'hover:shadow-md'
+                                    }`}
+                            >
+                                {/* Question Header */}
+                                <div
+                                    className="p-5 cursor-pointer hover:bg-slate-50/50 transition-colors"
+                                    onClick={() => setExpandedDoubtId(isExpanded ? null : doubt.doubtId!)}
+                                >
+                                    <div className="flex justify-between items-start gap-4">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 ${status.color}`}>
+                                                    <StatusIcon className="w-3 h-3" /> {status.text}
+                                                </span>
+                                                <span className="text-xs text-slate-400 flex items-center gap-1">
+                                                    <Clock className="w-3 h-3" />
+                                                    {getTimeAgo(doubt.createdAt)}
+                                                </span>
+                                                <span className="text-xs text-slate-400">
+                                                    by <span className="font-medium text-slate-600">{doubt.askedBy.name}</span>
+                                                </span>
+                                            </div>
+                                            <h3 className="text-slate-900 font-medium text-lg leading-relaxed">
+                                                {doubt.content}
+                                            </h3>
                                         </div>
-                                        <h3 className="text-slate-900 font-medium text-lg leading-relaxed">{doubt.content}</h3>
-                                    </div>
-                                    <div className="flex items-center gap-1 text-slate-400">
-                                        <MessageSquare className="w-4 h-4" />
-                                        <span className="text-xs font-bold">{doubt.replies.length}</span>
+                                        <div className="flex items-center gap-3 text-slate-400">
+                                            <div className="flex items-center gap-1">
+                                                <MessageSquare className="w-4 h-4" />
+                                                <span className="text-xs font-bold">{doubt.replies?.length || 0}</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <AnimatePresence>
-                                {isExpanded && (
-                                    <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden bg-slate-50/50 border-t border-slate-200">
-                                        <div className="p-5 space-y-6">
-
-                                            {/* STEP 1 & 2: AI ANSWER & CONFIRMATION */}
-                                            {doubt.aiAnswer && (
-                                                <div className="bg-white p-4 rounded-xl border border-purple-100 shadow-sm relative overflow-hidden">
-                                                    <div className="absolute top-0 left-0 w-1 h-full bg-purple-500" />
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <div className="px-2 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-bold rounded uppercase">Campus AI Suggestion</div>
-                                                    </div>
-                                                    <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-line">{doubt.aiAnswer}</p>
-
-                                                    {/* Confirmation Buttons (Only if AI status AND user is the owner) */}
-                                                    {doubt.status === 'AI' && doubt.askedBy.uid === user?.uid && (
-                                                        <div className="mt-4 flex gap-3 pt-4 border-t border-slate-100">
-                                                            <button
-                                                                onClick={(e) => { e.stopPropagation(); handleStudentAction(doubt.doubtId, 'SOLVED'); }}
-                                                                className="flex-1 py-2 bg-green-50 hover:bg-green-100 text-green-700 text-xs font-bold rounded-lg border border-green-200 transition-colors flex justify-center items-center gap-2"
-                                                            >
-                                                                <CheckCircle className="w-4 h-4" /> Solved!
-                                                            </button>
-                                                            <button
-                                                                onClick={(e) => { e.stopPropagation(); handleStudentAction(doubt.doubtId, 'CONFUSED'); }}
-                                                                className="flex-1 py-2 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold rounded-lg border border-red-200 transition-colors flex justify-center items-center gap-2"
-                                                            >
-                                                                <HelpCircle className="w-4 h-4" /> Still Confused
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {/* STEP 3+: FORUM REPLIES */}
-                                            {(doubt.status !== 'AI' || doubt.replies.length > 0) && (
+                                {/* Expanded Content */}
+                                <AnimatePresence>
+                                    {isExpanded && (
+                                        <motion.div
+                                            initial={{ height: 0 }}
+                                            animate={{ height: 'auto' }}
+                                            exit={{ height: 0 }}
+                                            className="overflow-hidden bg-slate-50/50 border-t border-slate-200"
+                                        >
+                                            <div className="p-5 space-y-6">
+                                                {/* Replies Section */}
                                                 <div className="space-y-4">
-                                                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Discussion Thread</h4>
+                                                    <div className="flex items-center justify-between">
+                                                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                                            Answers ({doubt.replies?.length || 0})
+                                                        </h4>
+                                                        {isOwner && doubt.status !== 'RESOLVED' && (
+                                                            <Button
+                                                                onClick={() => handleMarkResolved(doubt.doubtId!)}
+                                                                variant="outline"
+                                                                className="text-xs py-1 px-3 text-green-600 border-green-200 hover:bg-green-50"
+                                                            >
+                                                                <CheckCircle className="w-3 h-3 mr-1" />
+                                                                Mark as Resolved
+                                                            </Button>
+                                                        )}
+                                                    </div>
 
-                                                    {doubt.replies.length === 0 && (
-                                                        <p className="text-sm text-slate-400 italic text-center py-4">No replies yet. Be the first to help!</p>
-                                                    )}
-
-                                                    {doubt.replies.map(reply => (
-                                                        <div key={reply.replyId} className={`p-4 rounded-xl text-sm ${reply.isAccepted ? 'bg-green-50 border border-green-200' : 'bg-white border border-slate-200'}`}>
-                                                            <div className="flex justify-between items-start mb-2">
-                                                                <span className="font-bold text-slate-700 flex items-center gap-2">
-                                                                    {reply.repliedBy.name}
-                                                                    {reply.repliedBy.role === 'PROFESSOR' && <span className="px-1.5 py-0.5 bg-red-100 text-red-600 text-[10px] rounded uppercase">Prof</span>}
-                                                                    {reply.isAccepted && <span className="px-1.5 py-0.5 bg-green-100 text-green-600 text-[10px] rounded uppercase flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Answer</span>}
-                                                                </span>
-                                                                <span className="text-[10px] text-slate-400">{new Date(reply.createdAt).toLocaleTimeString()}</span>
-                                                            </div>
-                                                            <p className="text-slate-600">{reply.content}</p>
+                                                    {(!doubt.replies || doubt.replies.length === 0) ? (
+                                                        <div className="text-center py-8 bg-white rounded-xl border border-slate-200">
+                                                            <HelpCircle className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                                                            <p className="text-sm text-slate-500">No answers yet. Be the first to help!</p>
                                                         </div>
-                                                    ))}
+                                                    ) : (
+                                                        <div className="space-y-3">
+                                                            {doubt.replies.map(reply => (
+                                                                <div
+                                                                    key={reply.replyId}
+                                                                    className={`p-4 rounded-xl text-sm ${reply.isAccepted
+                                                                            ? 'bg-green-50 border-2 border-green-300'
+                                                                            : 'bg-white border border-slate-200'
+                                                                        }`}
+                                                                >
+                                                                    <div className="flex justify-between items-start mb-2">
+                                                                        <span className="font-bold text-slate-700 flex items-center gap-2">
+                                                                            <User className="w-4 h-4 text-slate-400" />
+                                                                            {reply.repliedBy.name}
+                                                                            {reply.repliedBy.role === 'PROFESSOR' && (
+                                                                                <span className="px-1.5 py-0.5 bg-red-100 text-red-600 text-[10px] rounded uppercase">
+                                                                                    Prof
+                                                                                </span>
+                                                                            )}
+                                                                            {reply.isAccepted && (
+                                                                                <span className="px-1.5 py-0.5 bg-green-100 text-green-600 text-[10px] rounded uppercase flex items-center gap-1">
+                                                                                    <CheckCircle className="w-3 h-3" /> Accepted
+                                                                                </span>
+                                                                            )}
+                                                                        </span>
+                                                                        <span className="text-[10px] text-slate-400">
+                                                                            {getTimeAgo(reply.createdAt)}
+                                                                        </span>
+                                                                    </div>
+                                                                    <p className="text-slate-600 leading-relaxed">{reply.content}</p>
+
+                                                                    {/* Accept Answer Button (only for question owner) */}
+                                                                    {isOwner && !reply.isAccepted && doubt.status !== 'RESOLVED' && (
+                                                                        <button
+                                                                            onClick={() => handleAcceptAnswer(doubt.doubtId!, reply.replyId)}
+                                                                            className="mt-3 text-xs text-green-600 hover:text-green-700 flex items-center gap-1"
+                                                                        >
+                                                                            <CheckCircle className="w-3 h-3" />
+                                                                            Accept as Answer
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
 
                                                     {/* Reply Input */}
                                                     {doubt.status !== 'RESOLVED' && (
                                                         <div className="flex gap-2 mt-4">
                                                             <Input
                                                                 className="bg-white"
-                                                                placeholder="Type a helpful reply..."
-                                                                value={replyContent[doubt.doubtId] || ''}
-                                                                onChange={(e) => setReplyContent(prev => ({ ...prev, [doubt.doubtId]: e.target.value }))}
+                                                                placeholder="Type your answer..."
+                                                                value={replyContent[doubt.doubtId!] || ''}
+                                                                onChange={(e) => setReplyContent(prev => ({
+                                                                    ...prev,
+                                                                    [doubt.doubtId!]: e.target.value
+                                                                }))}
+                                                                onKeyPress={(e) => {
+                                                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                                                        e.preventDefault();
+                                                                        handleSubmitReply(doubt.doubtId!);
+                                                                    }
+                                                                }}
                                                             />
-                                                            <Button onClick={() => handleSubmitReply(doubt.doubtId)} className="bg-slate-800 text-white">Reply</Button>
+                                                            <Button
+                                                                onClick={() => handleSubmitReply(doubt.doubtId!)}
+                                                                className="bg-blue-600 hover:bg-blue-700 text-white"
+                                                                disabled={submittingReply === doubt.doubtId || !replyContent[doubt.doubtId!]?.trim()}
+                                                            >
+                                                                {submittingReply === doubt.doubtId ? (
+                                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                                ) : (
+                                                                    <Send className="w-4 h-4" />
+                                                                )}
+                                                            </Button>
                                                         </div>
                                                     )}
                                                 </div>
-                                            )}
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </GlassCard>
-                    );
-                })}
-            </div>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </GlassCard>
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
 }

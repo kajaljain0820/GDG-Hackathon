@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import GlassCard from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Search, X, Send, FileText, MoreVertical, ThumbsUp, MessageSquare, Video, Calendar, TrendingUp, Command, Bell, User, BookOpen, Zap, Activity, LogOut } from 'lucide-react';
+import { Search, X, Send, FileText, MoreVertical, ThumbsUp, MessageSquare, Video, Calendar, TrendingUp, Command, Bell, User, BookOpen, Zap, Activity, LogOut, GraduationCap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { firestoreService } from '@/lib/firestoreService';
 import { peersService } from '@/lib/peersService';
@@ -12,7 +12,8 @@ import sessionsService from '@/lib/sessionsService';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function Dashboard() {
     const { token, user, isProfessor } = useAuth();
@@ -24,6 +25,7 @@ export default function Dashboard() {
     const [showNotifications, setShowNotifications] = useState(false);
     const [showProfile, setShowProfile] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [studentClass, setStudentClass] = useState<{ classId: string; className: string } | null>(null);
     const [stats, setStats] = useState({
         documentsProcessed: 0,
         doubtsAnswered: 0,
@@ -72,6 +74,22 @@ export default function Dashboard() {
                 // Filter docs uploaded by user
                 const userDocs = await firestoreService.getUserDocuments(user.uid);
 
+                // Get student's class info
+                try {
+                    const studentDoc = await getDoc(doc(db, 'students', user.uid));
+                    if (studentDoc.exists()) {
+                        const data = studentDoc.data();
+                        if (data.classId || data.className) {
+                            setStudentClass({
+                                classId: data.classId || '',
+                                className: data.className || ''
+                            });
+                        }
+                    }
+                } catch (classError) {
+                    console.log('No class info found for student');
+                }
+
                 setRecentDoubts(doubts.slice(0, 4));
 
                 // Calculate real stats
@@ -118,10 +136,18 @@ export default function Dashboard() {
             <header className="flex items-center justify-between mb-12 relative z-10">
                 <div>
                     <h1 className="text-4xl font-bold text-slate-900 tracking-tight mb-2">Command Center</h1>
-                    <p className="text-slate-500 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                        Welcome back, {user?.displayName?.split(' ')[0] || 'Student'}
-                    </p>
+                    <div className="flex items-center gap-3">
+                        <p className="text-slate-500 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                            Welcome back, {user?.displayName?.split(' ')[0] || 'Student'}
+                        </p>
+                        {studentClass?.className && (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                                <GraduationCap className="w-4 h-4" />
+                                {studentClass.className}
+                            </span>
+                        )}
+                    </div>
                 </div>
                 <div className="flex items-center gap-4">
                     {/* Search Button */}
