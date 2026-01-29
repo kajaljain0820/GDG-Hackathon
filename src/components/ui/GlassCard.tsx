@@ -9,9 +9,10 @@ interface GlassCardProps {
     className?: string;
     hoverEffect?: boolean;
     intensity?: 'low' | 'medium' | 'high';
+    onClick?: () => void;
 }
 
-export default function GlassCard({ children, className, hoverEffect = false, intensity = 'medium' }: GlassCardProps) {
+export default function GlassCard({ children, className, hoverEffect = false, intensity = 'medium', onClick }: GlassCardProps) {
     const intensityStyles = {
         low: "bg-white/40 border-white/40 shadow-lg shadow-blue-500/5",
         medium: "bg-white/60 border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)]",
@@ -24,10 +25,12 @@ export default function GlassCard({ children, className, hoverEffect = false, in
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
             whileHover={hoverEffect ? { scale: 1.02, rotateX: 2, rotateY: 2 } : {}}
+            onClick={onClick}
             className={cn(
                 "backdrop-blur-xl rounded-[2rem] relative overflow-hidden transition-all duration-500 group",
                 intensityStyles[intensity],
                 hoverEffect && "hover:shadow-[0_20px_50px_rgba(76,175,80,0.12)] hover:border-green-200/50",
+                onClick && "cursor-pointer",
                 className
             )}
         >
@@ -45,3 +48,4 @@ export default function GlassCard({ children, className, hoverEffect = false, in
         </motion.div>
     );
 }
+

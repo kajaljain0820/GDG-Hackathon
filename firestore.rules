@@ -33,6 +33,14 @@ service cloud.firestore {
       allow read, write: if true;
     }
     
+    // CLUB MANAGEMENT COLLECTIONS
+    match /clubs/{clubId} {
+      allow read, write: if true;
+    }
+    match /clubEvents/{eventId} {
+      allow read, write: if true;
+    }
+    
     // TEMPORARY OPEN ACCESS FOR TESTING (other collections)
     // TODO: Tighten these rules before production
     match /{document=**} {
