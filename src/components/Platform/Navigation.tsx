@@ -8,7 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 const studentLinks = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'My Tasks', href: '/dashboard/tasks', icon: ClipboardList },
-    { name: 'Study Plan Maker', href: '/dashboard/study-plan', icon: CalendarDays },
+    { name: 'Study Planner', href: '/dashboard/study-plan', icon: CalendarDays },
     { name: 'Doc Translator', href: '/dashboard/doc-translator', icon: Languages },
     { name: 'Resource Library', href: '/dashboard/resources', icon: Library },
     { name: 'AI Notebook', href: '/dashboard/notebook', icon: Book },

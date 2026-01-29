@@ -327,7 +327,7 @@ export default function Dashboard() {
                                 className="p-4 bg-white rounded-xl border border-slate-200 hover:border-pink-500 hover:shadow-lg transition-all group"
                             >
                                 <Calendar className="w-8 h-8 text-pink-500 mb-2 group-hover:scale-110 transition-transform" />
-                                <p className="font-semibold text-slate-800">Study Plan</p>
+                                <p className="font-semibold text-slate-800">Study Planner</p>
                                 <p className="text-xs text-slate-500">Plan your week</p>
                             </button>
                         </div>
