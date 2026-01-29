@@ -15,7 +15,8 @@ import {
     Users,
     BookOpen,
     BarChart3,
-    AlertTriangle
+    AlertTriangle,
+    LogOut
 } from 'lucide-react';
 import escalationService from '@/lib/escalationService';
 import firestoreService from '@/lib/firestoreService';
@@ -202,11 +203,24 @@ export default function ProfessorDashboard() {
     return (
         <div className="max-w-7xl mx-auto space-y-8">
             {/* Header */}
-            <div>
-                <h1 className="text-4xl font-bold text-slate-900 tracking-tight">Professor Dashboard</h1>
-                <p className="text-slate-500 mt-2">
-                    Manage escalated doubts and gain insights into student learning
-                </p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-4xl font-bold text-slate-900 tracking-tight">Professor Dashboard</h1>
+                    <p className="text-slate-500 mt-2">
+                        Manage escalated doubts and gain insights into student learning
+                    </p>
+                </div>
+                <Button
+                    variant="outline"
+                    className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 font-semibold gap-2 transition-all shadow-sm"
+                    onClick={() => {
+                        localStorage.removeItem('professorSession');
+                        router.push('/');
+                    }}
+                >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                </Button>
             </div>
 
             {/* Stats Grid */}

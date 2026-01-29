@@ -9,6 +9,7 @@ import chatRoutes from './routes/chatRoutes';
 import uploadRoutes from './routes/uploadRoutes';
 import authRoutes from './routes/authRoutes';
 import professorRoutes from './routes/professorRoutes';
+import studyPlanRoutes from './routes/studyPlanRoutes';
 
 const app = express();
 
@@ -42,6 +43,7 @@ app.use('/doubts', doubtRoutes);
 app.use('/sessions', sessionRoutes);
 app.use('/analytics', analyticsRoutes);
 app.use('/upload', uploadRoutes);
+app.use('/study-plans', studyPlanRoutes);
 
 app.get('/', (req: Request, res: Response) => {
     res.send('Campus AI Platform API is running on Vercel');
