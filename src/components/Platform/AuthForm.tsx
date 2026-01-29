@@ -7,8 +7,6 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Mail, GraduationCap, ArrowRight, Loader2, Shield } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 
 type LoginType = 'student' | 'professor';
@@ -29,20 +27,22 @@ export default function AuthForm() {
         setLoading(true);
 
         try {
-            // Student Login (No signup - admin creates accounts)
-            await signInWithEmailAndPassword(auth, email, password);
-            router.push('/dashboard');
+            // Use the unified login function that checks both Firebase Auth and Firestore
+            const result = await professorLogin(email, password);
+
+            if (result.success) {
+                // Check if admin (shouldn't happen in student login, but handle it)
+                if (result.isAdmin) {
+                    router.push('/dashboard/admin');
+                } else {
+                    router.push('/dashboard');
+                }
+            } else {
+                setError(result.error || 'Invalid email or password.');
+            }
         } catch (err: any) {
             console.error(err);
-            if (err.code === 'auth/invalid-email') {
-                setError('Invalid email address.');
-            } else if (err.code === 'auth/invalid-credential') {
-                setError('Invalid email or password.');
-            } else if (err.code === 'auth/user-not-found') {
-                setError('No account found. Contact your administrator.');
-            } else {
-                setError(err.message || 'Authentication failed');
-            }
+            setError(err.message || 'Authentication failed');
         } finally {
             setLoading(false);
         }
