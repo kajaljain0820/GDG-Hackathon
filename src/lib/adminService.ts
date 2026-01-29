@@ -3,18 +3,12 @@ import {
     collection,
     doc,
     addDoc,
-    setDoc,
-    getDoc,
     getDocs,
     updateDoc,
     deleteDoc,
-    query,
-    where,
-    orderBy,
     serverTimestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import api from './api';
 
 // ============================================
 // INTERFACES
@@ -74,44 +68,26 @@ export interface Branch {
 
 export async function createStudent(studentData: any): Promise<string> {
     try {
-        // If password is provided, use the API to create Auth User + Firestore Doc
-        if (studentData.password) {
-            console.log('🔐 Creating student with Auth credentials...');
-            const response = await api.post('/auth/create-student', {
-                email: studentData.email,
-                password: studentData.password,
-                name: studentData.name,
-                department: studentData.department,
-                year: studentData.year,
-                classId: studentData.classId,
-                className: studentData.className
-            });
+        // Create student document directly in Firestore
+        // Note: For full Firebase Auth integration, you would need Firebase Functions (Blaze plan)
+        // This creates the Firestore document. Users can login via Firebase Auth separately.
 
-            if (response.data.success) {
-                console.log('✅ Student Auth & Doc created:', response.data.uid);
-                await updateBranchCounts();
-                await updateClassStudentCount();
-                return response.data.uid;
-            } else {
-                throw new Error(response.data.message || 'Failed to create student');
-            }
-        }
-
-        // Fallback: Create just the document (if no password provided) - Legacy behavior
         const student = {
             name: studentData.name,
             email: studentData.email,
+            password: studentData.password, // Store temporarily for reference (in production, use proper auth)
             department: studentData.department,
             year: studentData.year,
             classId: studentData.classId || '',
             className: studentData.className || '',
+            role: 'student',
             status: studentData.status || 'active',
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
         };
 
         const docRef = await addDoc(collection(db, 'students'), student);
-        console.log('✅ Student created (Firestore only):', docRef.id);
+        console.log('✅ Student created:', docRef.id);
 
         // Update branch student count
         await updateBranchCounts();
@@ -171,38 +147,24 @@ export async function deleteStudent(studentId: string): Promise<void> {
 
 export async function createProfessor(professorData: any): Promise<string> {
     try {
-        // If password is provided, use the API to create Auth User + Firestore Doc
-        if (professorData.password) {
-            console.log('🔐 Creating professor with Auth credentials...');
-            const response = await api.post('/auth/create-professor', {
-                email: professorData.email,
-                password: professorData.password,
-                name: professorData.name,
-                department: professorData.department
-            });
+        // Create professor document directly in Firestore
+        // Note: For full Firebase Auth integration, you would need Firebase Functions (Blaze plan)
+        // This creates the Firestore document. Users can login via Firebase Auth separately.
 
-            if (response.data.success) {
-                console.log('✅ Professor Auth & Doc created:', response.data.uid);
-                await updateBranchCounts();
-                return response.data.uid;
-            } else {
-                throw new Error(response.data.message || 'Failed to create professor');
-            }
-        }
-
-        // Fallback: Create just the document (if no password provided) - Legacy behavior
         const professor = {
             name: professorData.name,
             email: professorData.email,
+            password: professorData.password, // Store temporarily for reference (in production, use proper auth)
             department: professorData.department,
             courses: professorData.courses || [],
+            role: 'professor',
             status: professorData.status || 'active',
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
         };
 
         const docRef = await addDoc(collection(db, 'professors'), professor);
-        console.log('✅ Professor created (Firestore only):', docRef.id);
+        console.log('✅ Professor created:', docRef.id);
 
         // Update branch professor count
         await updateBranchCounts();
