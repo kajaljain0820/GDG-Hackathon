@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationContext';
 import peersService, { UserProfile, Connection } from '@/lib/peersService';
+import adminService from '@/lib/adminService';
 import notificationService from '@/lib/notificationService';
 import ChatModal from '@/components/ChatModal';
 import { Sparkles as SparklesIcon } from 'lucide-react';
@@ -37,7 +38,7 @@ export default function ConnectPage() {
 
             try {
                 // Create/update current user's profile ONLY if it's a student
-                if (user?.uid) {
+                if (user?.uid && !professorSession) {
                     await peersService.createUserProfile({
                         userId: user.uid,
                         displayName: user.displayName || '',
@@ -49,8 +50,39 @@ export default function ConnectPage() {
                     });
                 }
 
-                // Load all peers
-                let allUsers = await peersService.getAllUsers();
+                // Load all discovery profiles from peersService
+                const discoveryUsers = await peersService.getAllUsers();
+
+                // Load all students added by admin
+                const adminStudents = await adminService.getStudents();
+
+                // Map admin students to UserProfile format
+                const mappedAdminStudents: UserProfile[] = adminStudents.map(s => ({
+                    userId: s.id!,
+                    displayName: s.name,
+                    email: s.email,
+                    department: s.department,
+                    year: parseInt(s.year) || 1,
+                    role: 'student',
+                    isOnline: false,
+                    interests: [],
+                    lastSeen: s.updatedAt || new Date(),
+                    createdAt: s.createdAt || new Date()
+                }));
+
+                // Combine both lists
+                let allUsers = [...discoveryUsers];
+
+                // Add admin students if they aren't already in discoveryUsers (by email or userId)
+                mappedAdminStudents.forEach(adminStudent => {
+                    const existing = allUsers.find(u => u.email === adminStudent.email || u.userId === adminStudent.userId);
+                    if (!existing) {
+                        allUsers.push(adminStudent);
+                    } else {
+                        // Update existing with admin data if needed
+                        if (!existing.role) existing.role = 'student';
+                    }
+                });
 
                 // Load connections
                 const userConnections = await peersService.getUserConnections(currentUserId);
@@ -94,7 +126,7 @@ export default function ConnectPage() {
                 const myProfile = allUsers.find(u => u.userId === currentUserId);
                 if (myProfile) setCurrentUserProfile(myProfile);
 
-                console.log('✅ Loaded', uniqueUsers.length, 'peers and', userConnections.length, 'connections');
+                console.log('✅ Loaded', uniqueUsers.length, 'peers (including admin students) and', userConnections.length, 'connections');
             } catch (error) {
                 console.error('❌ Error loading peers:', error);
             } finally {
@@ -106,7 +138,7 @@ export default function ConnectPage() {
         // Refresh every 30 seconds
         const interval = setInterval(loadData, 30000);
         return () => clearInterval(interval);
-    }, [currentUserId, user]);
+    }, [currentUserId, user, professorSession]);
 
 
     // Note: Recommendations are now loaded globally by NotificationProvider
