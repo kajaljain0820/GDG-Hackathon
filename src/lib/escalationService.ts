@@ -79,7 +79,7 @@ export async function getProfessorDoubts(courseId?: string): Promise<any[]> {
         if (professorSession && courseId) {
             try {
                 const session = JSON.parse(professorSession);
-                const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001/echo-1928rn/us-central1/api';
+                const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001/sparklink-d72d1/us-central1/api';
                 const response = await fetch(`${apiBaseUrl}/professor/doubts/${courseId}`, {
                     headers: {
                         'Authorization': `Professor ${session.uid}`,
@@ -145,7 +145,7 @@ export async function getConfusionInsights(courseId: string): Promise<any[]> {
         if (professorSession) {
             try {
                 const session = JSON.parse(professorSession);
-                const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001/echo-1928rn/us-central1/api';
+                const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001/sparklink-d72d1/us-central1/api';
                 const response = await fetch(`${apiBaseUrl}/professor/insights/${courseId}`, {
                     headers: {
                         'Authorization': `Professor ${session.uid}`,
@@ -198,3 +198,4 @@ export const escalationService = {
 };
 
 export default escalationService;
+

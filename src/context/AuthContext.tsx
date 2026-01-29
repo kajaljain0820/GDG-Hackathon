@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 
 interface BaseUser {
     uid: string;
@@ -50,6 +50,7 @@ interface AuthContextType {
     studentSession: StudentSession | null;
     studentLogin: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
     professorLogin: (email: string, password: string) => Promise<{ success: boolean; error?: string; isAdmin?: boolean }>;
+    refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -64,7 +65,8 @@ const AuthContext = createContext<AuthContextType>({
     adminSession: null,
     studentSession: null,
     studentLogin: async () => ({ success: false }),
-    professorLogin: async () => ({ success: false })
+    professorLogin: async () => ({ success: false }),
+    refreshUser: async () => { }
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -88,8 +90,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [adminSession, setAdminSession] = useState<AdminSession | null>(null);
     const [studentSession, setStudentSession] = useState<StudentSession | null>(null);
 
-    // Check for existing sessions on mount
-    useEffect(() => {
+    const refreshUser = async () => {
         // Check admin session
         const storedAdminSession = localStorage.getItem('adminSession');
         if (storedAdminSession) {
@@ -116,18 +117,44 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (storedProfessorSession) {
             try {
                 const session = JSON.parse(storedProfessorSession);
-                setProfessorSession(session);
-                setIsProfessor(true);
-                setToken(`Professor ${session.uid}`);
-                setUser({
-                    uid: session.uid,
-                    email: session.email,
-                    displayName: session.name,
-                    role: 'professor'
-                });
+
+                // Refresh from Firestore to get latest details
+                const docSnap = await getDoc(doc(db, 'professors', session.uid));
+                if (docSnap.exists()) {
+                    const professorData = docSnap.data();
+                    const refreshedSession: ProfessorSession = {
+                        role: 'professor',
+                        uid: docSnap.id,
+                        email: professorData.email,
+                        name: professorData.name,
+                        department: professorData.department
+                    };
+                    setProfessorSession(refreshedSession);
+                    setIsProfessor(true);
+                    setToken(`Professor ${refreshedSession.uid}`);
+                    setUser({
+                        uid: refreshedSession.uid,
+                        email: refreshedSession.email,
+                        displayName: refreshedSession.name,
+                        role: 'professor'
+                    });
+                    localStorage.setItem('professorSession', JSON.stringify(refreshedSession));
+                } else {
+                    // Fallback to stored session
+                    setProfessorSession(session);
+                    setIsProfessor(true);
+                    setToken(`Professor ${session.uid}`);
+                    setUser({
+                        uid: session.uid,
+                        email: session.email,
+                        displayName: session.name,
+                        role: 'professor'
+                    });
+                }
                 setLoading(false);
                 return;
             } catch (e) {
+                console.error("Error refreshing professor session:", e);
                 localStorage.removeItem('professorSession');
             }
         }
@@ -137,23 +164,57 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (storedStudentSession) {
             try {
                 const session = JSON.parse(storedStudentSession);
-                setStudentSession(session);
-                setIsStudent(true);
-                setToken(`Student ${session.uid}`);
-                setUser({
-                    uid: session.uid,
-                    email: session.email,
-                    displayName: session.name,
-                    role: 'student'
-                });
+
+                // Refresh from Firestore to get latest details
+                const docSnap = await getDoc(doc(db, 'students', session.uid));
+                if (docSnap.exists()) {
+                    const studentData = docSnap.data();
+                    const refreshedSession: StudentSession = {
+                        role: 'student',
+                        uid: docSnap.id,
+                        email: studentData.email,
+                        name: studentData.name,
+                        department: studentData.department,
+                        year: studentData.year,
+                        classId: studentData.classId,
+                        className: studentData.className
+                    };
+                    setStudentSession(refreshedSession);
+                    setIsStudent(true);
+                    setToken(`Student ${refreshedSession.uid}`);
+                    setUser({
+                        uid: refreshedSession.uid,
+                        email: refreshedSession.email,
+                        displayName: refreshedSession.name,
+                        role: 'student'
+                    });
+                    localStorage.setItem('studentSession', JSON.stringify(refreshedSession));
+                } else {
+                    // Fallback to stored session
+                    setStudentSession(session);
+                    setIsStudent(true);
+                    setToken(`Student ${session.uid}`);
+                    setUser({
+                        uid: session.uid,
+                        email: session.email,
+                        displayName: session.name,
+                        role: 'student'
+                    });
+                }
                 setLoading(false);
                 return;
             } catch (e) {
+                console.error("Error refreshing student session:", e);
                 localStorage.removeItem('studentSession');
             }
         }
 
         setLoading(false);
+    };
+
+    // Check for existing sessions on mount and refresh from Firestore
+    useEffect(() => {
+        refreshUser();
     }, []);
 
     const studentLogin = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
@@ -302,7 +363,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             adminSession,
             studentSession,
             studentLogin,
-            professorLogin
+            professorLogin,
+            refreshUser
         }}>
             {children}
         </AuthContext.Provider>

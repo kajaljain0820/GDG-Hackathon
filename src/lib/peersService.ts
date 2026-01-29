@@ -72,7 +72,7 @@ export async function getAllUsers(): Promise<UserProfile[]> {
         if (professorSession) {
             try {
                 const session = JSON.parse(professorSession);
-                const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001/echo-1928rn/us-central1/api';
+                const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001/sparklink-d72d1/us-central1/api';
                 const response = await fetch(`${apiBaseUrl}/professor/peers`, {
                     headers: {
                         'Authorization': `Professor ${session.uid}`,
@@ -163,7 +163,7 @@ export async function getUserConnections(userId: string): Promise<Connection[]> 
                 const session = JSON.parse(professorSession);
                 // Only use API if the requested userId matches the professor's ID (or we want all connections)
                 if (session.uid === userId) {
-                    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001/echo-1928rn/us-central1/api';
+                    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001/sparklink-d72d1/us-central1/api';
                     const response = await fetch(`${apiBaseUrl}/professor/connections`, {
                         headers: {
                             'Authorization': `Professor ${session.uid}`,
@@ -273,3 +273,4 @@ export const peersService = {
 };
 
 export default peersService;
+

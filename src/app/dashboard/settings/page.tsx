@@ -12,7 +12,7 @@ import { firestoreService } from '@/lib/firestoreService';
 import GoogleServicesConnect from '@/components/GoogleServicesConnect';
 
 export default function SettingsPage() {
-    const { user, studentSession, professorSession, isAdmin, logout } = useAuth();
+    const { user, studentSession, professorSession, isAdmin, logout, refreshUser } = useAuth();
     const router = useRouter();
     const [activeTab, setActiveTab] = useState('profile');
     const [loading, setLoading] = useState(false);
@@ -61,6 +61,7 @@ export default function SettingsPage() {
             });
 
             setMessage({ type: 'success', text: 'Profile updated in Firestore successfully!' });
+            await refreshUser();
         } catch (error: any) {
             setMessage({ type: 'error', text: error.message || 'Update failed' });
         } finally {
@@ -89,6 +90,7 @@ export default function SettingsPage() {
                 password: newPassword
             });
             setMessage({ type: 'success', text: 'Password updated successfully!' });
+            await refreshUser();
             setCurrentPassword('');
             setNewPassword('');
             setConfirmPassword('');
