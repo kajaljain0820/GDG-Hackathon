@@ -356,8 +356,11 @@ export default function StudentTasksPage() {
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    <User className="w-4 h-4" />
-                                                    <span>{assignment.professorName}</span>
+                                                    <User className="w-4 h-4 text-slate-400" />
+                                                    <span className="text-slate-600">
+                                                        <span className="text-xs text-slate-400 mr-1">Assigned by:</span>
+                                                        <span className="font-medium text-slate-700">{assignment.professorName || 'Unknown Professor'}</span>
+                                                    </span>
                                                 </div>
                                             </div>
                                         </div>
