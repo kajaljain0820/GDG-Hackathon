@@ -2,13 +2,13 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Book, MessageCircle, Video, Users, History, GraduationCap, Presentation, ClipboardList, BrainCircuit, FileText, Calendar, ListTodo, Library, CalendarDays } from 'lucide-react';
+import { LayoutDashboard, Book, MessageCircle, Video, Users, History, GraduationCap, Presentation, ClipboardList, BrainCircuit, FileText, Calendar, ListTodo, Library, CalendarDays, Shield, Building2, UserPlus, BookOpen } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 const studentLinks = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'My Tasks', href: '/dashboard/tasks', icon: ClipboardList },
     { name: 'Study Plan Maker', href: '/dashboard/study-plan', icon: CalendarDays },
-    { name: 'Task Manager', href: '/dashboard/my-tasks', icon: ListTodo },
     { name: 'Resource Library', href: '/dashboard/resources', icon: Library },
     { name: 'AI Notebook', href: '/dashboard/notebook', icon: Book },
     { name: 'Doubt Forum', href: '/dashboard/forum', icon: MessageCircle },
@@ -19,42 +19,82 @@ const studentLinks = [
 
 const professorLinks = [
     { name: 'Professor View', href: '/dashboard/professor', icon: GraduationCap },
+    { name: 'Task Assignment', href: '/dashboard/professor/assignments', icon: ClipboardList },
     { name: 'AI Notebook', href: '/dashboard/notebook', icon: Book },
     { name: 'AI PPT Generator', href: '/dashboard/ppt-generator', icon: Presentation },
-    { name: 'Task Assignment', href: '/dashboard/tasks', icon: ClipboardList },
     { name: 'Smart Quiz Maker', href: '/dashboard/quiz-maker', icon: BrainCircuit },
     { name: 'Doc Summarizer', href: '/dashboard/doc-summarizer', icon: FileText },
     { name: 'Club Management', href: '/dashboard/clubs', icon: Calendar },
     { name: 'Sessions', href: '/dashboard/sessions', icon: Video },
 ];
 
+const adminLinks = [
+    { name: 'Admin Dashboard', href: '/dashboard/admin', icon: Shield },
+    { name: 'Manage Students', href: '/dashboard/admin', icon: GraduationCap },
+    { name: 'Manage Professors', href: '/dashboard/admin', icon: UserPlus },
+    { name: 'Manage Classes', href: '/dashboard/admin', icon: BookOpen },
+    { name: 'Manage Branches', href: '/dashboard/admin', icon: Building2 },
+];
+
 export default function Navigation() {
     const pathname = usePathname();
-    const { user, isProfessor } = useAuth();
+    const { user, isProfessor, isAdmin, adminSession, professorSession } = useAuth();
 
     // Show different links based on role
-    const links = isProfessor ? professorLinks : studentLinks;
+    let links = studentLinks;
+    let roleLabel = 'Student';
+    let roleEmail = user?.email || 'student@echo.edu';
+    let avatarLetter = user?.displayName?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U';
+    let avatarGradient = 'from-green-500 to-emerald-600';
+
+    if (isAdmin) {
+        links = adminLinks;
+        roleLabel = 'Administrator';
+        roleEmail = adminSession?.email || 'admin@gmail.com';
+        avatarLetter = 'A';
+        avatarGradient = 'from-purple-500 to-pink-600';
+    } else if (isProfessor) {
+        links = professorLinks;
+        roleLabel = 'Professor';
+        roleEmail = professorSession?.email || 'professor@gmail.com';
+        avatarLetter = 'P';
+        avatarGradient = 'from-blue-500 to-indigo-600';
+    }
 
     return (
         <nav className="h-screen w-20 hover:w-64 transition-all duration-500 ease-out group fixed left-0 top-0 z-50 flex flex-col bg-white/80 backdrop-blur-xl border-r border-green-100/50 shadow-sm">
             {/* Logo / Brand */}
             <div className="h-20 flex items-center justify-center border-b border-green-100/30 relative">
-                <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-green-500/20">
-                    C
+                <div className={`w-10 h-10 bg-gradient-to-br ${avatarGradient} rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg`}>
+                    S
                 </div>
                 <span className="absolute left-16 font-bold text-xl text-slate-800 opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap pointer-events-none">
                     SparkLink
                 </span>
             </div>
 
+            {/* Role Badge */}
+            {(isAdmin || isProfessor) && (
+                <div className="px-3 py-2">
+                    <div className={`px-2 py-1 rounded-lg text-center text-xs font-bold ${isAdmin
+                            ? 'bg-purple-100 text-purple-700'
+                            : 'bg-blue-100 text-blue-700'
+                        }`}>
+                        <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+                            {isAdmin ? '🔐 Admin Mode' : '📚 Professor Mode'}
+                        </span>
+                    </div>
+                </div>
+            )}
+
             {/* Links */}
-            <div className="flex-1 py-8 flex flex-col gap-2 px-3">
-                {links.map(link => {
-                    const isActive = pathname === link.href;
+            <div className="flex-1 py-4 flex flex-col gap-2 px-3 overflow-y-auto">
+                {links.map((link, index) => {
+                    const isActive = pathname === link.href || (link.href !== '/dashboard/admin' && pathname.startsWith(link.href));
                     const Icon = link.icon;
                     return (
                         <Link
-                            key={link.href}
+                            key={`${link.href}-${index}`}
                             href={link.href}
                             className={cn(
                                 "flex items-center p-3 rounded-xl transition-all duration-300 relative overflow-hidden group/item",
@@ -76,15 +116,15 @@ export default function Navigation() {
             {/* Footer / Profile */}
             <div className="p-4 border-t border-green-100/30">
                 <Link href="/dashboard/settings" className="flex items-center overflow-hidden p-2 rounded-xl hover:bg-green-50/50 transition-colors cursor-pointer">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-green-500 to-emerald-600 flex-shrink-0 border border-white/50 flex items-center justify-center text-white text-xs font-bold shadow-sm">
-                        {isProfessor ? 'P' : (user?.displayName?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U')}
+                    <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${avatarGradient} flex-shrink-0 border border-white/50 flex items-center justify-center text-white text-xs font-bold shadow-sm`}>
+                        {avatarLetter}
                     </div>
                     <div className="ml-3 opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap">
                         <p className="text-sm font-medium text-slate-800">
-                            {isProfessor ? 'Professor' : (user?.displayName || user?.email?.split('@')[0] || 'User')}
+                            {roleLabel}
                         </p>
                         <p className="text-xs text-slate-500">
-                            {isProfessor ? 'professor@gmail.com' : (user?.email || 'student@echo.edu')}
+                            {roleEmail}
                         </p>
                     </div>
                 </Link>
@@ -92,4 +132,3 @@ export default function Navigation() {
         </nav>
     )
 }
-

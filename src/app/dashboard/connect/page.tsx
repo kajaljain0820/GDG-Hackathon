@@ -81,7 +81,12 @@ export default function ConnectPage() {
                 const otherUsers = allUsers.filter(u => u.userId !== currentUserId);
 
                 // Remove duplicates (just in case)
-                const uniqueUsers = Array.from(new Map(otherUsers.map(item => [item.userId, item])).values());
+                let uniqueUsers = Array.from(new Map(otherUsers.map(item => [item.userId, item])).values());
+
+                // If the current user is a student, filter out professors so students can only connect with other students
+                if (!professorSession) {
+                    uniqueUsers = uniqueUsers.filter(u => u.role !== 'professor');
+                }
 
                 setPeers(uniqueUsers);
 
@@ -224,9 +229,17 @@ export default function ConnectPage() {
     });
 
     // Get pending requests (requests sent to us)
-    const pendingRequests = connections.filter(c =>
-        c.toUserId === currentUserId && c.status === 'pending'
-    );
+    // For students, filter out pending requests from professors
+    const pendingRequests = connections.filter(c => {
+        if (c.toUserId !== currentUserId || c.status !== 'pending') return false;
+        // If user is a student, check if the requester is a professor
+        if (!professorSession) {
+            const requester = peers.find(p => p.userId === c.fromUserId);
+            // Exclude if requester is a professor
+            if (requester?.role === 'professor') return false;
+        }
+        return true;
+    });
 
     // Get connected peers
     const connectedPeers = peers.filter(peer => {

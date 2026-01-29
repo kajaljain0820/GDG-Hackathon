@@ -39,5 +39,9 @@
     "firebase-tools": "^15.1.0",
     "typescript": "^5.3.3"
   },
-  "private": true
+  "private": true,
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
 }

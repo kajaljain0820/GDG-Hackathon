@@ -23,7 +23,7 @@ import sessionsService from '@/lib/sessionsService';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function ProfessorDashboard() {
-    const { user, isProfessor, professorSession } = useAuth();
+    const { user, isProfessor, professorSession, isAdmin } = useAuth();
     const router = useRouter();
 
     const [loading, setLoading] = useState(true);
@@ -34,8 +34,15 @@ export default function ProfessorDashboard() {
     const [replyContent, setReplyContent] = useState('');
     const [replying, setReplying] = useState(false);
 
-    // STRICT ACCESS CONTROL - Professor Only
+    // STRICT ACCESS CONTROL - Professor Only (no admin, no students)
     useEffect(() => {
+        // Block admin from accessing professor dashboard
+        if (isAdmin) {
+            console.log('❌ Access denied: Admin attempting to access professor dashboard');
+            router.push('/dashboard/admin');
+            return;
+        }
+
         // Block students from accessing professor dashboard
         if (!isProfessor && !professorSession) {
             console.log('❌ Access denied: Student attempting to access professor dashboard');
@@ -46,7 +53,7 @@ export default function ProfessorDashboard() {
         if (isProfessor && professorSession) {
             console.log('✅ Professor access granted:', professorSession.email);
         }
-    }, [isProfessor, professorSession, router]);
+    }, [isProfessor, professorSession, isAdmin, router]);
 
     // Load dashboard data
     useEffect(() => {
