@@ -35,7 +35,7 @@ export default function DocTranslatorPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // n8n webhook URL for document translation
-    const N8N_WEBHOOK_URL = 'https://rohan2409.app.n8n.cloud/webhook/doc-translator';
+    const N8N_WEBHOOK_URL = 'https://rohan2409.app.n8n.cloud/webhook-test/doc-translator';
 
     const handleFileSelect = (file: File) => {
         const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
