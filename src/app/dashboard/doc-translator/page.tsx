@@ -112,6 +112,26 @@ export default function DocTranslatorPage() {
             const langName = FAMOUS_LANGUAGES.find(l => l.code === targetLanguage)?.name || targetLanguage;
             formData.append('targetLanguageName', langName);
 
+            // Debug logging
+            console.log('=== DOC TRANSLATOR DEBUG ===');
+            console.log('📁 File details:', {
+                name: selectedFile.name,
+                size: selectedFile.size,
+                type: selectedFile.type,
+                lastModified: selectedFile.lastModified
+            });
+            console.log('🌐 Target language:', targetLanguage, '(', langName, ')');
+            console.log('🔗 Webhook URL:', N8N_WEBHOOK_URL);
+            console.log('📦 FormData entries:');
+            for (const [key, value] of formData.entries()) {
+                if (value instanceof File) {
+                    console.log(`  - ${key}: [File] ${value.name} (${value.size} bytes, ${value.type})`);
+                } else {
+                    console.log(`  - ${key}: ${value}`);
+                }
+            }
+            console.log('📤 Sending request...');
+
             const response = await fetch(N8N_WEBHOOK_URL, {
                 method: 'POST',
                 body: formData,
@@ -120,7 +140,13 @@ export default function DocTranslatorPage() {
 
             clearTimeout(timeoutId);
 
+            console.log('📥 Response received:');
+            console.log('  - Status:', response.status, response.statusText);
+            console.log('  - OK:', response.ok);
+            console.log('  - Headers:', Object.fromEntries(response.headers.entries()));
+
             const responseText = await response.text();
+            console.log('📄 Response body:', responseText.substring(0, 500));
 
             if (!response.ok) {
                 throw new Error(`Server error: ${response.status} - ${responseText}`);
