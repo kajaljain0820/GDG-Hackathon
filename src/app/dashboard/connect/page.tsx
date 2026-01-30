@@ -34,11 +34,15 @@ export default function ConnectPage() {
     // Load peers and connections
     useEffect(() => {
         const loadData = async () => {
-            if (!currentUserId) return;
+            console.log('🔄 Loading Peer Connect data...');
+            console.log('📌 currentUserId:', currentUserId);
+            console.log('📌 studentSession:', studentSession?.uid);
+            console.log('📌 professorSession:', professorSession?.uid);
+            console.log('📌 isAdmin:', isAdmin);
 
             try {
-                // Create/update current user's profile ONLY if it's a student
-                if (studentSession && !professorSession && !isAdmin) {
+                // Create/update current user's profile ONLY if it's a logged in student
+                if (currentUserId && studentSession && !professorSession && !isAdmin) {
                     await peersService.createUserProfile({
                         userId: studentSession.uid,
                         displayName: studentSession.name || '',
@@ -62,24 +66,29 @@ export default function ConnectPage() {
                 let adminStudents: any[] = [];
                 try {
                     adminStudents = await adminService.getStudents();
-                    console.log(`Fetched ${adminStudents.length} students from adminService`);
+                    console.log(`✅ Fetched ${adminStudents.length} students from adminService:`, adminStudents);
                 } catch (e) {
-                    console.error("Failed to load admin students:", e);
+                    console.error("❌ Failed to load admin students:", e);
                 }
 
                 // Map admin students to UserProfile format
-                const mappedAdminStudents: UserProfile[] = adminStudents.map(s => ({
-                    userId: s.id || s.uid || 'unknown',
-                    displayName: s.name || s.displayName || 'Unnamed Student',
-                    email: s.email || '',
-                    department: s.department || 'General',
-                    year: parseInt(s.year) || 1,
-                    role: 'student',
-                    isOnline: false,
-                    interests: s.interests || [],
-                    lastSeen: s.updatedAt || new Date(),
-                    createdAt: s.createdAt || new Date()
-                }));
+                // Use Firestore document ID as userId - this ensures students are visible
+                const mappedAdminStudents: UserProfile[] = adminStudents
+                    .filter(s => s.id) // Only include students with valid IDs
+                    .map(s => ({
+                        userId: s.id, // Use Firestore document ID
+                        displayName: s.name || s.displayName || 'Unnamed Student',
+                        email: s.email || '',
+                        department: s.department || 'General',
+                        year: parseInt(s.year) || 1,
+                        role: 'student' as const,
+                        isOnline: false,
+                        interests: s.interests || [],
+                        lastSeen: s.updatedAt || new Date(),
+                        createdAt: s.createdAt || new Date()
+                    }));
+
+                console.log(`✅ Mapped ${mappedAdminStudents.length} admin students to UserProfile format`);
 
                 // Combine and Deduplicate using a Map
                 const allUsersMap = new Map<string, UserProfile>();
@@ -89,10 +98,10 @@ export default function ConnectPage() {
                     if (u.userId) allUsersMap.set(u.userId, u);
                 });
 
-                // 2. Add/Override with admin students
-                mappedAdminStudents.forEach(s => {
-                    if (!s.userId || s.userId === 'unknown') return;
+                console.log(`📊 Discovery users in map: ${allUsersMap.size}`);
 
+                // 2. Add/Override with admin students (they always have valid IDs now)
+                mappedAdminStudents.forEach(s => {
                     const existing = allUsersMap.get(s.userId);
                     if (existing) {
                         allUsersMap.set(s.userId, {
@@ -106,30 +115,35 @@ export default function ConnectPage() {
                     }
                 });
 
+                console.log(`📊 Total users in map after adding admin students: ${allUsersMap.size}`);
+
                 let allUsers = Array.from(allUsersMap.values());
 
-                // Load connections
-                const userConnections = await peersService.getUserConnections(currentUserId);
-                setConnections(userConnections);
+                // Load connections only if user is logged in
+                let userConnections: Connection[] = [];
+                if (currentUserId) {
+                    userConnections = await peersService.getUserConnections(currentUserId);
+                    setConnections(userConnections);
 
-                // Check for pending requests from users NOT in allUsers
-                const pendingRequestUserIds = userConnections
-                    .filter(c => c.toUserId === currentUserId && c.status === 'pending')
-                    .map(c => c.fromUserId);
+                    // Check for pending requests from users NOT in allUsers
+                    const pendingRequestUserIds = userConnections
+                        .filter(c => c.toUserId === currentUserId && c.status === 'pending')
+                        .map(c => c.fromUserId);
 
-                // Find IDs that are missing from allUsers
-                const missingUserIds = pendingRequestUserIds.filter(id => !allUsers.find(u => u.userId === id));
+                    // Find IDs that are missing from allUsers
+                    const missingUserIds = pendingRequestUserIds.filter(id => !allUsers.find(u => u.userId === id));
 
-                if (missingUserIds.length > 0) {
-                    console.log('Fetching missing profiles for pending requests:', missingUserIds);
-                    try {
-                        const missingProfiles = await Promise.all(
-                            missingUserIds.map(id => peersService.getUserProfile(id))
-                        );
-                        const validMissingProfiles = missingProfiles.filter(p => p !== null) as UserProfile[];
-                        allUsers = [...allUsers, ...validMissingProfiles];
-                    } catch (e) {
-                        console.error('Error fetching missing profiles:', e);
+                    if (missingUserIds.length > 0) {
+                        console.log('Fetching missing profiles for pending requests:', missingUserIds);
+                        try {
+                            const missingProfiles = await Promise.all(
+                                missingUserIds.map(id => peersService.getUserProfile(id))
+                            );
+                            const validMissingProfiles = missingProfiles.filter(p => p !== null) as UserProfile[];
+                            allUsers = [...allUsers, ...validMissingProfiles];
+                        } catch (e) {
+                            console.error('Error fetching missing profiles:', e);
+                        }
                     }
                 }
 
