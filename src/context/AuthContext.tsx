@@ -240,6 +240,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 className: studentData.className
             };
 
+            // Clear other sessions
+            setAdminSession(null);
+            setProfessorSession(null);
+            setIsAdmin(false);
+            setIsProfessor(false);
+            localStorage.removeItem('adminSession');
+            localStorage.removeItem('professorSession');
+
             setStudentSession(session);
             setIsStudent(true);
             setToken(`Student ${studentDoc.id}`);
@@ -266,6 +274,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 uid: 'admin-001'
             };
 
+            // Clear other sessions
+            setProfessorSession(null);
+            setStudentSession(null);
+            setIsProfessor(false);
+            setIsStudent(false);
+            localStorage.removeItem('professorSession');
+            localStorage.removeItem('studentSession');
+
             setAdminSession(adminSessionData);
             setIsAdmin(true);
             setToken(`Admin ${adminSessionData.uid}`);
@@ -286,6 +302,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 name: 'Dr. Professor',
                 uid: 'professor-001'
             };
+
+            // Clear other sessions
+            setAdminSession(null);
+            setStudentSession(null);
+            setIsAdmin(false);
+            setIsStudent(false);
+            localStorage.removeItem('adminSession');
+            localStorage.removeItem('studentSession');
 
             setProfessorSession(professorSessionData);
             setIsProfessor(true);
@@ -318,6 +342,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 name: professorData.name,
                 department: professorData.department
             };
+
+            // Clear other sessions
+            setAdminSession(null);
+            setStudentSession(null);
+            setIsAdmin(false);
+            setIsStudent(false);
+            localStorage.removeItem('adminSession');
+            localStorage.removeItem('studentSession');
 
             setProfessorSession(session);
             setIsProfessor(true);

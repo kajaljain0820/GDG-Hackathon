@@ -3,117 +3,21 @@
 import { useState } from 'react';
 import GlassCard from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
-import { Presentation, Sparkles, FileText, Wand2, ChevronRight, Loader2, AlertCircle, ChevronLeft, Download } from 'lucide-react';
-
-interface Slide {
-    title: string;
-    content: string[];
-    notes?: string;
-}
-
-interface GeneratedPresentation {
-    title: string;
-    slides: Slide[];
-}
+import { Presentation, Sparkles, Wand2, Loader2, AlertCircle, Download } from 'lucide-react';
 
 export default function PPTGeneratorPage() {
     const [topic, setTopic] = useState('');
     const [numSlides, setNumSlides] = useState('10');
     const [style, setStyle] = useState('Professional');
     const [isGenerating, setIsGenerating] = useState(false);
+    const [isDownloading, setIsDownloading] = useState(false);
     const [error, setError] = useState('');
-    const [presentation, setPresentation] = useState<GeneratedPresentation | null>(null);
-    const [currentSlide, setCurrentSlide] = useState(0);
+    const [htmlContent, setHtmlContent] = useState<string | null>(null);
 
     // n8n webhook URL
-    const WEBHOOK_URL = 'https://swaraj11.app.n8n.cloud/webhook-test/2a7a5e4d-e2f6-4769-a5d3-d99a7bfe5406';
+    const WEBHOOK_URL = 'https://rohan12345.app.n8n.cloud/webhook/ppt-gen';
 
     const styles = ['Professional', 'Academic', 'Creative'];
-
-    // Helper function to extract presentation content from n8n response
-    const extractPresentation = (data: any): GeneratedPresentation | null => {
-        console.log('Extracting presentation from:', data);
-
-        // Handle array response
-        if (Array.isArray(data) && data.length > 0) {
-            data = data[0];
-        }
-
-        // Try to find slides in various formats
-        let slides: Slide[] = [];
-        let title = topic || 'Generated Presentation';
-
-        // Check for direct slides array
-        if (data.slides && Array.isArray(data.slides)) {
-            slides = data.slides.map((slide: any, index: number) => ({
-                title: slide.title || slide.heading || `Slide ${index + 1}`,
-                content: Array.isArray(slide.content)
-                    ? slide.content
-                    : (slide.content || slide.text || slide.body || '').split('\n').filter((s: string) => s.trim()),
-                notes: slide.notes || slide.speakerNotes || ''
-            }));
-            title = data.title || data.presentationTitle || title;
-        }
-        // Check for presentation object
-        else if (data.presentation && Array.isArray(data.presentation.slides)) {
-            slides = data.presentation.slides.map((slide: any, index: number) => ({
-                title: slide.title || slide.heading || `Slide ${index + 1}`,
-                content: Array.isArray(slide.content)
-                    ? slide.content
-                    : (slide.content || slide.text || '').split('\n').filter((s: string) => s.trim()),
-                notes: slide.notes || ''
-            }));
-            title = data.presentation.title || title;
-        }
-        // Check if the response itself is an array of slides
-        else if (Array.isArray(data) && data.length > 0 && (data[0].title || data[0].heading)) {
-            slides = data.map((slide: any, index: number) => ({
-                title: slide.title || slide.heading || `Slide ${index + 1}`,
-                content: Array.isArray(slide.content)
-                    ? slide.content
-                    : (slide.content || slide.text || '').split('\n').filter((s: string) => s.trim()),
-                notes: slide.notes || ''
-            }));
-        }
-        // Try to parse as text/string content
-        else if (typeof data === 'string' || data.output || data.text || data.response) {
-            const textContent = typeof data === 'string' ? data : (data.output || data.text || data.response);
-            // Try to parse slide format from text
-            const slideMatches = textContent.match(/(?:Slide\s*\d+|#{1,3}\s+.+)/gi);
-            if (slideMatches) {
-                const sections = textContent.split(/(?=Slide\s*\d+|#{1,3}\s+)/i);
-                slides = sections
-                    .filter((s: string) => s.trim())
-                    .map((section: string, index: number) => {
-                        const lines = section.trim().split('\n').filter((l: string) => l.trim());
-                        return {
-                            title: lines[0]?.replace(/^#+\s*/, '').replace(/^Slide\s*\d+[:\s]*/i, '') || `Slide ${index + 1}`,
-                            content: lines.slice(1).map((l: string) => l.replace(/^[-•*]\s*/, '').trim()).filter((l: string) => l),
-                            notes: ''
-                        };
-                    });
-            } else {
-                // Just split by paragraphs
-                const paragraphs = textContent.split('\n\n').filter((p: string) => p.trim());
-                slides = paragraphs.map((p: string, index: number) => ({
-                    title: `Slide ${index + 1}`,
-                    content: p.split('\n').filter((l: string) => l.trim()),
-                    notes: ''
-                }));
-            }
-        }
-
-        if (slides.length === 0) {
-            // Fallback: create a single slide with raw content
-            slides = [{
-                title: 'Generated Content',
-                content: [JSON.stringify(data, null, 2)],
-                notes: ''
-            }];
-        }
-
-        return { title, slides };
-    };
 
     const handleGenerate = async () => {
         if (!topic.trim()) {
@@ -123,8 +27,7 @@ export default function PPTGeneratorPage() {
 
         setIsGenerating(true);
         setError('');
-        setPresentation(null);
-        setCurrentSlide(0);
+        setHtmlContent(null);
 
         try {
             console.log('Sending to n8n:', { topic, numSlides, style });
@@ -149,23 +52,25 @@ export default function PPTGeneratorPage() {
             }
 
             const responseText = await response.text();
-            console.log('Raw response:', responseText);
+            console.log('Raw response:', responseText.substring(0, 200) + '...');
 
-            let data;
+            let extractedHtml = responseText;
             try {
-                data = JSON.parse(responseText);
+                const data = JSON.parse(responseText);
+                if (data.output || data.html || data.text) {
+                     extractedHtml = data.output || data.html || data.text;
+                } else if (Array.isArray(data) && data[0] && (data[0].html || data[0].output)) {
+                    extractedHtml = data[0].html || data[0].output;
+                }
             } catch {
-                data = responseText;
+                // Not JSON, assume raw string is HTML
             }
-
-            console.log('Parsed data:', data);
-
-            const extractedPresentation = extractPresentation(data);
-            if (extractedPresentation) {
-                setPresentation(extractedPresentation);
-            } else {
-                throw new Error('Could not parse presentation from response');
+            
+            if (!extractedHtml || extractedHtml.trim().length === 0) {
+                 throw new Error("Received empty response from the workflow");
             }
+            
+            setHtmlContent(extractedHtml);
 
         } catch (err: any) {
             console.error('Generation error:', err);
@@ -181,15 +86,36 @@ export default function PPTGeneratorPage() {
         }
     };
 
-    const nextSlide = () => {
-        if (presentation && currentSlide < presentation.slides.length - 1) {
-            setCurrentSlide(currentSlide + 1);
-        }
-    };
-
-    const prevSlide = () => {
-        if (currentSlide > 0) {
-            setCurrentSlide(currentSlide - 1);
+    const handleDownload = async () => {
+        if (!htmlContent) return;
+        setIsDownloading(true);
+        
+        try {
+            const res = await fetch('/api/generate-pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ html: htmlContent })
+            });
+            
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Failed to generate PDF');
+            }
+            
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${topic.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'presentation'}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (error) {
+            console.error('Download error:', error);
+            setError('Failed to download presentation. Please try again.');
+        } finally {
+            setIsDownloading(false);
         }
     };
 
@@ -330,24 +256,19 @@ export default function PPTGeneratorPage() {
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="font-bold text-slate-800 flex items-center gap-2">
                                 <Sparkles className="w-5 h-5 text-purple-500" />
-                                {presentation ? presentation.title : 'Preview'}
+                                {htmlContent ? (topic || 'Generated Presentation') : 'Preview'}
                             </h3>
-                            {presentation && (
+                            {htmlContent && (
                                 <div className="flex items-center gap-2">
-                                    <span className="text-sm text-slate-500">
-                                        Slide {currentSlide + 1} of {presentation.slides.length}
-                                    </span>
                                     <Button
                                         variant="ghost"
-                                        className="p-2"
-                                        onClick={() => {
-                                            const content = presentation.slides.map((s, i) =>
-                                                `Slide ${i + 1}: ${s.title}\n${s.content.join('\n')}`
-                                            ).join('\n\n---\n\n');
-                                            navigator.clipboard.writeText(content);
-                                        }}
+                                        className="p-2 px-4 flex items-center gap-2 text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 disabled:opacity-50"
+                                        onClick={handleDownload}
+                                        disabled={isDownloading}
+                                        title="Download as PDF/PPT"
                                     >
-                                        <Download className="w-4 h-4" />
+                                        {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                                        <span className="text-sm font-medium">{isDownloading ? 'Downloading...' : 'Download'}</span>
                                     </Button>
                                 </div>
                             )}
@@ -362,83 +283,14 @@ export default function PPTGeneratorPage() {
                                     <p className="text-xs text-white/50 mt-2">This may take a moment</p>
                                 </div>
                             </div>
-                        ) : presentation ? (
-                            <div className="space-y-4">
-                                {/* Main Slide Display */}
-                                <div className="aspect-video bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-8 flex flex-col relative overflow-hidden">
-                                    {/* Decorative elements */}
-                                    <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl"></div>
-                                    <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl"></div>
-
-                                    {/* Slide content */}
-                                    <div className="relative z-10 flex-1 flex flex-col">
-                                        <h2 className="text-2xl md:text-3xl font-bold text-white mb-6">
-                                            {presentation.slides[currentSlide]?.title}
-                                        </h2>
-                                        <div className="flex-1 overflow-y-auto">
-                                            <ul className="space-y-3">
-                                                {presentation.slides[currentSlide]?.content.map((point, index) => (
-                                                    <li key={index} className="flex items-start gap-3 text-white/90">
-                                                        <span className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0"></span>
-                                                        <span className="text-sm md:text-base">{point}</span>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    </div>
-
-                                    {/* Slide number badge */}
-                                    <div className="absolute bottom-4 right-4 bg-white/10 backdrop-blur-sm px-3 py-1 rounded-full text-white/60 text-sm">
-                                        {currentSlide + 1} / {presentation.slides.length}
-                                    </div>
-                                </div>
-
-                                {/* Navigation */}
-                                <div className="flex items-center justify-between">
-                                    <Button
-                                        variant="outline"
-                                        onClick={prevSlide}
-                                        disabled={currentSlide === 0}
-                                        className="gap-2 disabled:opacity-50"
-                                    >
-                                        <ChevronLeft className="w-4 h-4" />
-                                        Previous
-                                    </Button>
-
-                                    {/* Slide thumbnails */}
-                                    <div className="flex gap-1 overflow-x-auto max-w-md px-2">
-                                        {presentation.slides.map((_, index) => (
-                                            <button
-                                                key={index}
-                                                onClick={() => setCurrentSlide(index)}
-                                                className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium transition-all flex-shrink-0 ${index === currentSlide
-                                                        ? 'bg-purple-500 text-white'
-                                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                                    }`}
-                                            >
-                                                {index + 1}
-                                            </button>
-                                        ))}
-                                    </div>
-
-                                    <Button
-                                        variant="outline"
-                                        onClick={nextSlide}
-                                        disabled={currentSlide === presentation.slides.length - 1}
-                                        className="gap-2 disabled:opacity-50"
-                                    >
-                                        Next
-                                        <ChevronRight className="w-4 h-4" />
-                                    </Button>
-                                </div>
-
-                                {/* Speaker Notes */}
-                                {presentation.slides[currentSlide]?.notes && (
-                                    <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
-                                        <p className="text-xs font-semibold text-amber-700 mb-1">Speaker Notes</p>
-                                        <p className="text-sm text-amber-800">{presentation.slides[currentSlide].notes}</p>
-                                    </div>
-                                )}
+                        ) : htmlContent ? (
+                            <div className="aspect-video bg-white rounded-xl overflow-hidden border border-slate-200 shadow-inner">
+                                <iframe 
+                                    srcDoc={htmlContent} 
+                                    className="w-full h-full border-0"
+                                    title="Generated Presentation"
+                                    sandbox="allow-same-origin allow-scripts"
+                                />
                             </div>
                         ) : (
                             <div className="aspect-video bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl flex items-center justify-center">
@@ -446,31 +298,6 @@ export default function PPTGeneratorPage() {
                                     <Presentation className="w-16 h-16 mx-auto mb-4 opacity-30" />
                                     <p className="text-lg font-medium mb-2">No Presentation Yet</p>
                                     <p className="text-sm text-white/50">Enter a topic and click generate to create your presentation</p>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Slide Overview */}
-                        {presentation && (
-                            <div className="mt-6 pt-6 border-t border-slate-100">
-                                <h4 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                                    <FileText className="w-4 h-4" />
-                                    All Slides Overview
-                                </h4>
-                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-48 overflow-y-auto pr-2">
-                                    {presentation.slides.map((slide, index) => (
-                                        <button
-                                            key={index}
-                                            onClick={() => setCurrentSlide(index)}
-                                            className={`p-3 rounded-lg border text-left transition-all ${index === currentSlide
-                                                    ? 'border-purple-500 bg-purple-50'
-                                                    : 'border-slate-200 bg-white hover:border-purple-300'
-                                                }`}
-                                        >
-                                            <p className="text-xs font-medium text-slate-800 truncate">{slide.title}</p>
-                                            <p className="text-xs text-slate-500 mt-1">{slide.content.length} points</p>
-                                        </button>
-                                    ))}
                                 </div>
                             </div>
                         )}
